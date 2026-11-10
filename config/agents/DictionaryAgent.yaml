@@ -1,0 +1,36 @@
+role: DictionaryAgent
+enabled: true
+driver: grok
+launch: ["grok"]
+card: src/agents/DictionaryAgent/.well-know/agent.json
+
+home: "${OUTPUT}/.campaign/agents/DictionaryAgent/home"
+cwd: "${OUTPUT}/.campaign/agents/DictionaryAgent/work"
+
+prompt:
+  source: "src.agents.DictionaryAgent.prompt:SYSTEM_PROMPT"
+  response_format: true
+  delivery: first_send
+
+tools:
+  include:
+    - find_file
+    - search_file
+    - search_dir
+    - write_file
+    - open
+    - goto
+    - edit
+    - scroll_up
+    - scroll_down
+    - validate_dictionary_file
+    - track_web_retrieve_progress
+    - search_web
+    - bash
+    - exit
+
+mcp: {transport: stdio, server: fuzzagent-mcp, role_arg: DictionaryAgent}
+session: {policy: resume, id_source: [index_file, probe], reset_on: [error]}
+dispatch: {block_seconds: 0, poll_seconds: 30}
+status: native
+snapshot: {on: done, mode: artifacts}

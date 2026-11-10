@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+"""stdio MCP entrypoint for one FuzzAgent role.
+
+Configured by the coding-agent CLI (codex config.toml, grok config.toml,
+dsh profile patch, pi mcp.json) as::
+
+    fuzzagent-mcp --role HarnessAgent
+
+Environment required: ``SRC``, ``OUTPUT`` (the campaign tree), optionally
+``FUZZAGENT_TASK_ID``; otherwise the task id is read from
+``$OUTPUT/.campaign/agents/<Role>/current_task``.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+# Importing ``src`` would otherwise initialise (and possibly wipe) the campaign.
+os.environ.setdefault("FUZZAGENT_SKIP_ENV_INIT", "1")
+
+from src.runtime.mcp.server import main  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main())

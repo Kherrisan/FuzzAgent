@@ -1,0 +1,42 @@
+role: CoverageAnalyzerAgent
+enabled: true
+driver: codex
+launch: ["codex", "--no-daemon"]
+model: gpt-5.1-codex
+provider: openai
+card: src/agents/CoverageAnalyzerAgent/.well-know/agent.json
+
+home: "${OUTPUT}/.campaign/agents/CoverageAnalyzerAgent/home"
+cwd: "${OUTPUT}/.campaign/agents/CoverageAnalyzerAgent/work"
+env:
+  OPENAI_BASE_URL: "${OPENAI_BASE_URL}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
+prompt:
+  source: "src.agents.CoverageAnalyzerAgent.prompt:SYSTEM_PROMPT"
+  response_format: true
+  delivery: first_send
+
+tools:
+  include:
+    - open
+    - goto
+    - scroll_up
+    - scroll_down
+    - find_file
+    - show_overview_code_coverage
+    - show_module_code_coverage
+    - show_file_code_coverage
+    - show_api_code_coverage
+    - show_func_code_coverage
+    - show_branch_blocker_code_coverage
+    - call_chain_analysis
+    - generate_coverage_guidance_report
+    - bash
+    - exit
+
+mcp: {transport: stdio, server: fuzzagent-mcp, role_arg: CoverageAnalyzerAgent}
+session: {policy: resume, id_source: [index_file, probe], reset_on: [error]}
+dispatch: {block_seconds: 0, poll_seconds: 30}
+status: native
+snapshot: {on: done, mode: artifacts}

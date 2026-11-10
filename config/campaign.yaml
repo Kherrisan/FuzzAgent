@@ -1,0 +1,36 @@
+# Campaign-level settings for the hc runtime (campaignctl).
+# Paths are expanded from the environment when the campaign starts.
+name: "${REPO_BASE_NAME}"
+target: "${REPO_BASE_NAME}"
+src: "${SRC}"
+output: "${OUTPUT}"
+session: "${HC_SESSION}"
+
+# Wall-clock budget; campaignctl stops dispatching at the deadline, lets the
+# current task finish, snapshots and then runs the coverage exporter.
+duration_hours: 24
+
+# Keep the legacy DISABLE_COVERAGE_GUIDANCE switch semantics.
+coverage_guidance: true
+
+engine: hc          # hc | legacy
+manager_role: ManagerAgent
+agents_dir: config/agents
+max_rounds: 0       # 0 = until the budget is exhausted
+
+hc:
+  binary: hc
+  session: "${HC_SESSION}"
+  wait_timeout: 300     # seconds per hc wait check-in
+  poll_seconds: 30
+  keep: true
+  outlive_parent: true
+
+snapshot:
+  # Rollback points are created after every accepted task.
+  enabled: true
+
+resume:
+  # warm (terminal alive) -> session (CLI resume) -> brief (resume.md)
+  mode: auto
+  brief_tasks: 10

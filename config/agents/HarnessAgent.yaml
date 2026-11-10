@@ -1,0 +1,41 @@
+role: HarnessAgent
+enabled: true
+driver: codex
+launch: ["codex", "--no-daemon"]
+model: gpt-5.1-codex
+provider: openai
+card: src/agents/HarnessAgent/.well-know/agent.json
+
+home: "${OUTPUT}/.campaign/agents/HarnessAgent/home"
+cwd: "${OUTPUT}/.campaign/agents/HarnessAgent/work"
+env:
+  OPENAI_BASE_URL: "${OPENAI_BASE_URL}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+
+prompt:
+  source: "src.agents.HarnessAgent.prompt:SYSTEM_PROMPT"
+  guidance_variant: "src.agents.HarnessAgent.prompt:NO_COVERAGE_GUIDANCE_SYSTEM_PROMPT"
+  response_format: true
+  delivery: first_send
+
+tools:
+  include:
+    - find_file
+    - search_file
+    - search_dir
+    - write_file
+    - open
+    - goto
+    - edit
+    - scroll_up
+    - scroll_down
+    - compile_and_check_harness
+    - search_web
+    - bash
+    - exit
+
+mcp: {transport: stdio, server: fuzzagent-mcp, role_arg: HarnessAgent}
+session: {policy: resume, id_source: [index_file, probe], reset_on: [error]}
+dispatch: {block_seconds: 0, poll_seconds: 30}
+status: native
+snapshot: {on: done, mode: artifacts}
