@@ -17,7 +17,9 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(os.environ.get("FUZZAGENT_HOME") or "/root/FuzzAgent")
+if not (REPO_ROOT / "src").is_dir():
+    REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 # Importing ``src`` would otherwise initialise (and possibly wipe) the campaign.

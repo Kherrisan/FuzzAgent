@@ -11,7 +11,7 @@ ENV TZ=Asia/Shanghai
 # Install dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        bash git sudo jq curl wget gzip locales python3 python3-yaml \
+        bash git sudo jq curl wget gzip locales \
         build-essential cmake pkg-config lld ninja-build \
         binutils binutils-dev autoconf automake libtool libncurses5-dev libgdbm-dev libnss3-dev liblzma-dev zlib1g-dev libyaml-dev graphviz libgraphviz-dev \
         libicu-dev libcurl4-openssl-dev libssl-dev libsqlite3-dev ruby-dev libreadline-dev libffi-dev libbz2-dev libc++-dev libc++abi-dev libc6-dev libgcc-9-dev tzdata \
@@ -162,9 +162,9 @@ RUN go install github.com/boyter/scc/v3@latest
 # pi is installed from its own package when the campaign needs it.
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    npm install -g @openai/codex @deepseek-harness-tui/dsh-tui@0.19.0 \
-        @earendil-works/pi-coding-agent@1.5.2 && \
+    apt-get install -y --no-install-recommends nodejs python3 python3-yaml && \
+    npm install -g @openai/codex@0.163.0 @deepseek-ai/dsh@0.2.0-rc.2 \
+        @deepseek-harness-tui/dsh-tui@0.19.0 @earendil-works/pi-coding-agent@1.5.2 && \
     npm cache clean --force && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 

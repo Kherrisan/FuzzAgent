@@ -9,7 +9,9 @@ P2 capability probe (``campaignctl doctor``).
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -126,6 +128,7 @@ class DshTuiDriver(Driver):
         super().__init__("dsh-tui", "**/sessions/*")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
+        self._ensure_profile(home)
         patch = home / "dsh-mcp.patch.yml"
         _write(
             patch,
@@ -138,6 +141,21 @@ class DshTuiDriver(Driver):
             f"    args: {json.dumps(_mcp_args(agent.role))}\n",
         )
         agent.launch = [*agent.launch, "--patch", str(patch)]
+
+    def _ensure_profile(self, home: Path) -> None:
+        """Register the dsh-tui profile in this role's isolated DSH_HOME."""
+        if not shutil.which("dsh"):
+            return
+        dsh_home = home / ".dsh"
+        dsh_home.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ, DSH_HOME=str(dsh_home))
+        subprocess.run(
+            ["dsh", "plugin", "--profile", "dsh-tui", "add", "@deepseek-harness-tui/dsh-tui"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=env,
+        )
 
     def resume(self, agent, session_id: str) -> list[str] | None:
         return [*agent.launch, "--resume", session_id]
