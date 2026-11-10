@@ -61,6 +61,9 @@ class Terminal:
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "Terminal":
         status = data.get("status")
+        if isinstance(status, str):
+            # `hc ls` reports the bare status word; `hc get` reports a record.
+            status = {"state": status}
         return cls(
             address=str(data.get("address", "")),
             name=data.get("name"),
@@ -81,12 +84,13 @@ class HC:
         self.env = dict(os.environ)
         if env:
             self.env.update(env)
+        # hc selects the core session through the environment, not a global flag.
+        if self.session:
+            self.env["HC_SESSION"] = self.session
 
     # --- plumbing ---------------------------------------------------------
     def _invoke(self, args: list[str], timeout: int = 60) -> Any:
         argv = [self.binary, *args]
-        if self.session and "--session" not in args:
-            argv = [self.binary, "--session", self.session, *args]
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, env=self.env)
         if proc.returncode != 0:
             raise HCError(
@@ -169,15 +173,16 @@ class HC:
 
     def read(self, name: str, lines: int = 200) -> str:
         proc = subprocess.run(
-            [self.binary, "--session", self.session, "read", name, "--lines", str(lines)]
-            if self.session
-            else [self.binary, "read", name, "--lines", str(lines)],
+            [self.binary, "read", name, "--lines", str(lines)],
             capture_output=True,
             text=True,
             timeout=60,
             env=self.env,
         )
         return proc.stdout or proc.stderr or ""
+
+    def keys(self, name: str, *keys: str) -> dict[str, Any]:
+        return self._invoke(["keys", name, *keys], timeout=60)
 
     def kill(self, name: str) -> None:
         try:

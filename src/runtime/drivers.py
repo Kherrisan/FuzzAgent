@@ -94,6 +94,24 @@ class GrokDriver(Driver):
         super().__init__("grok", "**/.grok/sessions/**")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
+        if "--always-approve" not in agent.launch:
+            agent.launch = [*agent.launch, "--always-approve"]
+        # Pre-trust the role working directories so the TUI does not stop on
+        # "Trust this folder?" before the first task.
+        trust = home / ".grok" / "trust.json"
+        trusted = []
+        if trust.exists():
+            try:
+                trusted = json.loads(trust.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                trusted = []
+        if not isinstance(trusted, list):
+            trusted = []
+        for path in {str(cwd), str(Path(campaign.output) / ".campaign" / "agents" / agent.role)}:
+            if path not in trusted:
+                trusted.append(path)
+        trust.parent.mkdir(parents=True, exist_ok=True)
+        trust.write_text(json.dumps(trusted, indent=2), encoding="utf-8")
         config = home / ".grok" / "config.toml"
         _write(
             config,

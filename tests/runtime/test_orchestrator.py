@@ -82,17 +82,21 @@ def orchestrator(campaign, tmp_path):
     return OrchestratorStub(campaign, {"HarnessAgent": agent}, hc=fake, observer=lambda: '{"ok": true}'), fake
 
 
-def test_first_dispatch_primes_the_agent(orchestrator):
+def test_first_dispatch_primes_the_agent(orchestrator, campaign):
     orch, fake = orchestrator
     result = orch.dispatch("HarnessAgent", "write harness_000")
     assert "finished HarnessAgent" in result
     assert "This is the current states of the fuzzing tasks" in result
-    assert "Harness Generator Agent" in fake.sent[0]  # system prompt on the first message
-    assert "write harness_000" in fake.sent[0]
+    assert "role instructions are in" in fake.sent[0]
+    prime = Path(orch.role_dir("HarnessAgent") / "prime.md").read_text()
+    assert "Harness Generator Agent" in prime  # system prompt delivered by file
+    assert "write harness_000" in prime
 
     orch.dispatch("HarnessAgent", "write harness_001")
-    assert "Harness Generator Agent" not in fake.sent[1]  # primed session afterwards
-    assert "write harness_001" in fake.sent[1]
+    assert "next task" in fake.sent[1]  # primed session afterwards
+    task_file = Path(campaign.output) / ".campaign" / "tasks"
+    latest = sorted(task_file.iterdir())[-1]
+    assert "write harness_001" in (latest / "task_with_context.md").read_text()
 
 
 def test_dispatch_writes_task_artifacts(orchestrator, campaign):

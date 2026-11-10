@@ -117,6 +117,15 @@ class Orchestrator:
     def ensure_terminal(self, agent: AgentConfig) -> Terminal:
         name = self.terminal_name(agent)
         terminal = self.hc.get(name)
+        expected = Path(agent.launch[0]).name
+        if terminal and terminal.is_live:
+            running = str(terminal.raw.get("agent") or "")
+            if running and running != expected:
+                # ``--keep`` substitutes a shell when the program is lost;
+                # treat that as "needs a fresh terminal".
+                self.hc.kill(name)
+                self.hc.remove(name)
+                terminal = None
         if terminal and terminal.is_live:
             if terminal.state_word == "working":
                 terminal = self.hc.wait_idle(name, timeout=int(agent.dispatch.poll_seconds) * 4)
@@ -144,6 +153,13 @@ class Orchestrator:
             scrub_env=agent.env_scrub,
         )
         self.write_state(agent.role, terminal=terminal.address, name=name)
+        for _ in range(3):
+            if not terminal.is_blocked:
+                break
+            self.journal({"event": "dialog_auto_ok", "role": agent.role, "msg": terminal.blocked_message})
+            self.hc.keys(name, "enter")
+            time.sleep(2)
+            terminal = self.hc.wait_idle(name, timeout=60)
         self.journal({"event": "terminal_launched", "role": agent.role, "terminal": terminal.address})
         return self.hc.wait_idle(name, timeout=180)
 
@@ -172,7 +188,21 @@ class Orchestrator:
 
         state = self.read_state(role)
         primed = bool(state.get("primed"))
-        message = body if primed else prompts.compose_first_message(agent, self.campaign, body)
+        context_file = directory / "task_with_context.md"
+        if primed:
+            message = (
+                f"Read your next task from {context_file} and execute it. "
+                "Call the exit tool when the task is done."
+            )
+        else:
+            prime_file = self.role_dir(role) / "prime.md"
+            prime_file.write_text(
+                prompts.compose_first_message(agent, self.campaign, body), encoding="utf-8"
+            )
+            message = (
+                f"Your role instructions are in {prime_file}; read that file completely and follow it. "
+                f"Your first task is in {context_file}. Call the exit tool when the task is done."
+            )
         previous_turn = terminal.turn
         record = TaskRecord(task_id=task_id, role=role, started=time.time(), terminal=terminal.address)
         self.journal({"event": "dispatch", "task": task_id, "role": role, "task_text": task[:400]})
