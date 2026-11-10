@@ -108,19 +108,40 @@ ENV CMAKE_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu"
 ENV DEBIAN_FRONTEND=dialog
 
 
-# For easy debug (tmux and pwndbg)
-RUN cd /root && git clone --single-branch https://github.com/gpakosz/.tmux.git && \
+# For easy debug (tmux and pwndbg).
+# pwndbg's setup.sh installs gdb via sudo, which drops http_proxy.
+# Write the build proxy into apt so that step still reaches the Ubuntu archive.
+RUN --mount=type=secret,id=github_token,required=false \
+    proxy="${http_proxy:-${HTTP_PROXY:-}}"; \
+    sprox="${https_proxy:-${HTTPS_PROXY:-$proxy}}"; \
+    if [ -n "$proxy" ]; then \
+      printf 'Acquire::http::Proxy "%s";\nAcquire::https::Proxy "%s";\n' "$proxy" "$sprox" > /etc/apt/apt.conf.d/99proxy; \
+      printf 'Defaults env_keep += "http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY"\n' > /etc/sudoers.d/99proxy; \
+      chmod 440 /etc/sudoers.d/99proxy; \
+    fi; \
+    if [ -s /run/secrets/github_token ]; then \
+      basic="$(printf 'x-access-token:%s' "$(cat /run/secrets/github_token)" | base64 -w0)"; \
+      export GIT_CONFIG_COUNT=1; \
+      export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"; \
+      export GIT_CONFIG_VALUE_0="Authorization: Basic ${basic}"; \
+      unset basic; \
+    fi; \
+    cd /root && git clone --single-branch https://github.com/gpakosz/.tmux.git && \
     ln -s -f .tmux/.tmux.conf && \
     cp .tmux/.tmux.conf.local . && \
-    git clone https://github.com/pwndbg/pwndbg.git /tmp/pwndbg && \
+    git clone --depth 1 https://github.com/pwndbg/pwndbg.git /tmp/pwndbg && \
     cd /tmp/pwndbg && \
     git submodule update --init --recursive && \
-    ./setup.sh
+    DEBIAN_FRONTEND=noninteractive ./setup.sh && \
+    rm -f /root/.gitconfig
 
 
-# Install later dependencies
-RUN apt-get install -y --no-install-recommends \
-    bubblewrap rsync yasm
+# Install later dependencies. The LLVM step deletes apt lists, so update again.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    bubblewrap rsync yasm && \
+    rm -f /etc/apt/apt.conf.d/99proxy /etc/sudoers.d/99proxy && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Golang dependencies
 RUN wget https://go.dev/dl/go1.25.1.linux-amd64.tar.gz && \
@@ -135,5 +156,10 @@ RUN go install github.com/boyter/scc/v3@latest
 
 # We Must mapping our source code to this path in the container (DEV Phase)
 WORKDIR /root/FuzzAgent
+
+# Agent snapshots commit the output tree. Without an identity, git commit
+# fails and the process dies on `git rev-parse HEAD`.
+RUN git config --global user.name "fuzzagent" && \
+    git config --global user.email "fuzzagent@localhost"
 
 #ENTRYPOINT ["python", "main.py"]
