@@ -11,7 +11,7 @@ ENV TZ=Asia/Shanghai
 # Install dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        bash git sudo jq curl wget gzip locales \
+        bash git sudo jq curl wget gzip locales python3 python3-yaml \
         build-essential cmake pkg-config lld ninja-build \
         binutils binutils-dev autoconf automake libtool libncurses5-dev libgdbm-dev libnss3-dev liblzma-dev zlib1g-dev libyaml-dev graphviz libgraphviz-dev \
         libicu-dev libcurl4-openssl-dev libssl-dev libsqlite3-dev ruby-dev libreadline-dev libffi-dev libbz2-dev libc++-dev libc++abi-dev libc6-dev libgcc-9-dev tzdata \

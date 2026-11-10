@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import time
 from pathlib import Path
@@ -153,6 +154,8 @@ class CampaignController:
             if path.startswith("missing:"):
                 problems.append(f"{role}: launcher not installed ({path})")
         hc_version = None
+        if shutil.which(self.hc.binary) is None:
+            problems.append(f"hc binary not found on PATH: {self.hc.binary}")
         try:
             import subprocess
 

@@ -2,6 +2,15 @@
 set -uo pipefail
 
 BENCHMARK_DURATION="${FUZZING_DURATION:-24h}"
+ENGINE="${FUZZAGENT_ENGINE:-legacy}"
+CONFIG="${FUZZAGENT_CONFIG:-config/campaign.yaml}"
+
+if [[ "$ENGINE" == "hc" ]]; then
+    echo "Starting FuzzAgent benchmark (hc runtime, $CONFIG) for $BENCHMARK_DURATION."
+    exec timeout --signal=INT --kill-after=60s "$BENCHMARK_DURATION" \
+        campaignctl --config "$CONFIG" up --resume
+fi
+
 echo "Starting FuzzAgent benchmark for $BENCHMARK_DURATION."
 timeout --signal=INT --kill-after=60s "$BENCHMARK_DURATION" uv run main.py
 FUZZ_EXIT_CODE=$?

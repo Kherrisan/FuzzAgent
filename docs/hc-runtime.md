@@ -53,6 +53,33 @@ The tool allowlists are the legacy ones, so the prompts keep working; the MCP
 schemas are byte-identical to the legacy OpenAI function schemas (covered by
 `tests/runtime/test_registry_parity.py`).
 
+## What the image provides (and what it does not)
+
+Built into `fuzzagent` by `docker/Dockerfile`:
+
+| Component | How |
+|---|---|
+| C/C++ toolchain, LLVM 21, AFL++, coverage utils, Rust/casr, Go, gdb/pwndbg, tmux | apt / source builds |
+| Python 3.12 (uv-managed) + system `python3`/`python3-yaml` | `uv python install` + apt |
+| Node 22 + `codex` + `dsh-tui@0.19.0` | npm (pinned) |
+| `grok` 1.0.77 | official xAI installer (pinned) |
+| `fuzzagent-mcp`, `campaignctl` | `COPY bin/… /usr/local/bin` |
+| git identity for VMS snapshots | `git config --global` |
+
+Still **outside** the image (by design or not yet done):
+
+| Component | Where it comes from |
+|---|---|
+| project source + `src/runtime` | bind-mounted at `/root/FuzzAgent` |
+| Python project deps | the mounted `.venv`, or `uv run` on first start (needs network/proxy) |
+| `hc` (herdr-core) | put the static binary at `docker/herdr-core` before building — the Dockerfile installs it only when present; `campaignctl doctor` fails loudly if `hc` is missing |
+| `pi` | not installed yet (needs ≥1.1.0) |
+| agent credentials | `bin/collect-auth` → read-only mount → per-role HOME by `campaignctl prepare` |
+| benchmark source checkouts | host `.cache/targets`, mounted at `/src/<target>` |
+
+`benchmark/run_benchmark.sh` picks the runtime with `FUZZAGENT_ENGINE`:
+`legacy` (default, `uv run main.py`) or `hc` (`campaignctl --config … up --resume`).
+
 ## Auth files
 
 Agent CLIs keep credentials in their own files; the image does not bake them in.
