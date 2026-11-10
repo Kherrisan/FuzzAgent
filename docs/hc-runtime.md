@@ -15,6 +15,11 @@ MCP server instead of the in-process `BaseAgent` loop.
 | dsh-tui | **≥ 0.17.0** | yes | own `ink/termio/osc7501.js`; the 0.15.0 on the dev box predates it |
 | pi | **≥ 1.1.0** | yes | upstream "report program status via OSC 7501" |
 
+grok is installed by the image at build time with the official installer:
+`curl -fsSL https://x.ai/cli/install.sh | bash -s 1.0.77` (verified in a clean
+`ubuntu:24.04`: installs a static binary in `$HOME/.grok` and symlinks
+`/usr/local/bin/grok`; needs the build proxy, which Docker passes to `RUN`).
+
 The old `HERDR_*` channel is **not** used: `env_scrub` removes those variables
 from every agent terminal so dsh-tui reports through OSC 7501 like the others.
 
@@ -96,7 +101,7 @@ because the baseline did not record its model settings.
 
 ## Remaining work
 
-- P2 probe in the image: install codex/dsh-tui 0.19/grok/pi + `hc`, run
+- P2 probe in the image: codex/dsh-tui 0.19/grok installed (pi still to do) + `hc`, run
   `doctor`, confirm `reported: true` for all four under hc.
 - P3 shadow run: legacy manager vs hc manager on a short openssl campaign.
 - P4 interruption drills (`kill -9` controller, container restart, host reboot).

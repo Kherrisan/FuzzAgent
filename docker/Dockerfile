@@ -157,14 +157,23 @@ RUN go install github.com/boyter/scc/v3@latest
 
 # --- hc runtime: coding-agent CLIs + herdr-core -----------------------------
 # Node is needed by the codex/dsh-tui CLIs.  Pin the agent CLIs so a rebuild
-# does not silently change behaviour; grok/pi are installed by their own
-# installers (see docs/hc-runtime.md) or mounted into the image.
+# does not silently change behaviour.  grok comes from its own installer (below);
+# pi is installed from its own package when the campaign needs it.
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     npm install -g @openai/codex @deepseek-harness-tui/dsh-tui@0.19.0 && \
     npm cache clean --force && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# grok CLI (xAI): official installer, pinned.  It unpacks a statically linked
+# binary into $HOME/.grok and symlinks /usr/local/bin/grok itself; the fallback
+# link covers installer versions that only edit shell rc files, and keeps grok
+# reachable from the per-role HOME directories / non-login shells.
+ARG GROK_VERSION=1.0.77
+RUN curl -fsSL https://x.ai/cli/install.sh | bash -s "${GROK_VERSION}" && \
+    (command -v grok >/dev/null || ln -sf /root/.grok/bin/grok /usr/local/bin/grok) && \
+    grok --version
 
 # herdr-core (the `hc` binary) is a single static executable.  Put it in
 # docker/herdr-core before building, or mount it at run time.
