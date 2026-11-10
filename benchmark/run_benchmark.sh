@@ -12,7 +12,12 @@ if [[ "$ENGINE" == "hc" ]]; then
 fi
 
 echo "Starting FuzzAgent benchmark for $BENCHMARK_DURATION."
-timeout --signal=INT --kill-after=60s "$BENCHMARK_DURATION" uv run main.py
+BAKED_PY=/opt/fuzzagent-build/.venv/bin/python
+if [[ -x "$BAKED_PY" ]]; then
+    timeout --signal=INT --kill-after=60s "$BENCHMARK_DURATION" "$BAKED_PY" main.py
+else
+    timeout --signal=INT --kill-after=60s "$BENCHMARK_DURATION" uv run main.py
+fi
 FUZZ_EXIT_CODE=$?
 
 if [[ "$FUZZ_EXIT_CODE" -ne 0 && "$FUZZ_EXIT_CODE" -ne 124 ]]; then

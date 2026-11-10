@@ -100,6 +100,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     /root/.local/bin/uv python install 3.12 
 
 ENV PATH="/root/.local/bin:${PATH}"
+
 ENV PATH="/root/FuzzAgent/.venv/bin:${PATH}"
 ENV CMAKE_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu"
     
@@ -162,7 +163,8 @@ RUN go install github.com/boyter/scc/v3@latest
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
-    npm install -g @openai/codex @deepseek-harness-tui/dsh-tui@0.19.0 && \
+    npm install -g @openai/codex @deepseek-harness-tui/dsh-tui@0.19.0 \
+        @earendil-works/pi-coding-agent@1.5.2 && \
     npm cache clean --force && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -175,18 +177,33 @@ RUN curl -fsSL https://x.ai/cli/install.sh | bash -s "${GROK_VERSION}" && \
     (command -v grok >/dev/null || ln -sf /root/.grok/bin/grok /usr/local/bin/grok) && \
     grok --version
 
-# herdr-core (the `hc` binary) is a single static executable.  Put it in
-# docker/herdr-core before building, or mount it at run time.
+# herdr-core (the `hc` binary): use docker/herdr-core when it is supplied
+# (offline builds), otherwise fetch the pinned release with the official
+# installer.  Either way the image ends up with `hc` on PATH.
+ARG HC_VERSION=0.1.18
 COPY docker/ /tmp/docker/
-RUN if [ -f /tmp/docker/herdr-core ]; then \
+RUN set -eux; \
+    if [ -f /tmp/docker/herdr-core ]; then \
         install -m 0755 /tmp/docker/herdr-core /usr/local/bin/hc; \
-    fi && \
-    rm -rf /tmp/docker
+    else \
+        curl -fsSL https://releases.herdr.dev/core/install.sh \
+            | HC_VERSION="${HC_VERSION}" HC_INSTALL_DIR=/usr/local/bin sh; \
+    fi; \
+    rm -rf /tmp/docker; \
+    hc --version
 
 # The MCP server every agent CLI spawns; the controller entrypoint.
 COPY bin/fuzzagent-mcp bin/campaignctl /usr/local/bin/
 RUN chmod +x /usr/local/bin/fuzzagent-mcp /usr/local/bin/campaignctl
 
+# --- project Python environment (source stays mounted, deps are baked) ------
+# `uv run` at runtime must not need the network: pin the project environment
+# into the image and disable implicit syncs.
+COPY pyproject.toml uv.lock README.md /opt/fuzzagent-build/
+ENV UV_PROJECT_ENVIRONMENT=/opt/fuzzagent-build/.venv
+RUN /root/.local/bin/uv sync --directory /opt/fuzzagent-build --frozen --no-install-project
+ENV UV_NO_SYNC=1
+ENV PATH="/opt/fuzzagent-build/.venv/bin:${PATH}"
 # We Must mapping our source code to this path in the container (DEV Phase)
 WORKDIR /root/FuzzAgent
 

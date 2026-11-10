@@ -64,6 +64,9 @@ Built into `fuzzagent` by `docker/Dockerfile`:
 | Node 22 + `codex` + `dsh-tui@0.19.0` | npm (pinned) |
 | `grok` 1.0.77 | official xAI installer (pinned) |
 | `fuzzagent-mcp`, `campaignctl` | `COPY bin/… /usr/local/bin` |
+| `hc` (herdr-core) 0.1.18 | official installer (`releases.herdr.dev`), or a local `docker/herdr-core` override |
+| `pi` 1.5.2 | npm `@earendil-works/pi-coding-agent` (pinned) |
+| project Python deps | `uv sync --frozen` into `/opt/fuzzagent-build/.venv`, baked (`UV_PROJECT_ENVIRONMENT`, `UV_NO_SYNC=1`) |
 | git identity for VMS snapshots | `git config --global` |
 
 Still **outside** the image (by design or not yet done):
@@ -71,14 +74,13 @@ Still **outside** the image (by design or not yet done):
 | Component | Where it comes from |
 |---|---|
 | project source + `src/runtime` | bind-mounted at `/root/FuzzAgent` |
-| Python project deps | the mounted `.venv`, or `uv run` on first start (needs network/proxy) |
-| `hc` (herdr-core) | put the static binary at `docker/herdr-core` before building — the Dockerfile installs it only when present; `campaignctl doctor` fails loudly if `hc` is missing |
-| `pi` | not installed yet (needs ≥1.1.0) |
-| agent credentials | `bin/collect-auth` → read-only mount → per-role HOME by `campaignctl prepare` |
-| benchmark source checkouts | host `.cache/targets`, mounted at `/src/<target>` |
+| benchmark config + agent configs | `config/` (mounted with the source) |
+| auth files | `bin/collect-auth` → read-only mount → per-role HOME |
+| target checkouts | host `.cache/targets`, mounted at `/src/<target>` |
 
 `benchmark/run_benchmark.sh` picks the runtime with `FUZZAGENT_ENGINE`:
-`legacy` (default, `uv run main.py`) or `hc` (`campaignctl --config … up --resume`).
+`legacy` (default, baked `/opt/fuzzagent-build/.venv/bin/python main.py`, or
+`uv run main.py` as fallback) or `hc` (`campaignctl --config … up --resume`).
 
 ## Auth files
 
