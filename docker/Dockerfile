@@ -154,6 +154,30 @@ ENV PATH=$PATH:$GOPATH/bin
 
 RUN go install github.com/boyter/scc/v3@latest
 
+
+# --- hc runtime: coding-agent CLIs + herdr-core -----------------------------
+# Node is needed by the codex/dsh-tui CLIs.  Pin the agent CLIs so a rebuild
+# does not silently change behaviour; grok/pi are installed by their own
+# installers (see docs/hc-runtime.md) or mounted into the image.
+RUN apt-get update && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    npm install -g @openai/codex @deepseek-harness-tui/dsh-tui@0.19.0 && \
+    npm cache clean --force && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# herdr-core (the `hc` binary) is a single static executable.  Put it in
+# docker/herdr-core before building, or mount it at run time.
+COPY docker/ /tmp/docker/
+RUN if [ -f /tmp/docker/herdr-core ]; then \
+        install -m 0755 /tmp/docker/herdr-core /usr/local/bin/hc; \
+    fi && \
+    rm -rf /tmp/docker
+
+# The MCP server every agent CLI spawns; the controller entrypoint.
+COPY bin/fuzzagent-mcp bin/campaignctl /usr/local/bin/
+RUN chmod +x /usr/local/bin/fuzzagent-mcp /usr/local/bin/campaignctl
+
 # We Must mapping our source code to this path in the container (DEV Phase)
 WORKDIR /root/FuzzAgent
 

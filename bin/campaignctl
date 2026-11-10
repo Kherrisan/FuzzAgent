@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""Operator entrypoint for a campaign running on the hc runtime."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+os.environ.setdefault("FUZZAGENT_SKIP_ENV_INIT", "1")
+
+from src.runtime.campaign import CampaignController, load  # noqa: E402
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="campaignctl")
+    parser.add_argument("--config", default="config/campaign.yaml")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    up = sub.add_parser("up", help="prepare and run the campaign")
+    up.add_argument("--rounds", type=int, default=None)
+    up.add_argument("--resume", action="store_true", help="prepend a resume brief to the first round")
+
+    sub.add_parser("prepare", help="prepare the tree without dispatching")
+    sub.add_parser("status", help="print artifact/terminal state")
+    sub.add_parser("doctor", help="check binaries, hc and artifact consistency")
+    sub.add_parser("resume-brief", help="print the resume brief")
+
+    rollback = sub.add_parser("rollback", help="restore a VMS snapshot")
+    rollback.add_argument("--to", default="last-good")
+
+    args = parser.parse_args(argv)
+    controller = CampaignController(load(args.config))
+
+    if args.command == "up":
+        controller.run(max_rounds=args.rounds, resume=args.resume)
+        return 0
+    if args.command == "prepare":
+        controller.prepare()
+        return 0
+    if args.command == "status":
+        print(json.dumps(controller.status(), indent=2))
+        return 0
+    if args.command == "doctor":
+        report = controller.doctor()
+        print(json.dumps(report, indent=2))
+        return 1 if report["problems"] else 0
+    if args.command == "resume-brief":
+        print(controller.orchestrator.resume_brief())
+        return 0
+    if args.command == "rollback":
+        print(controller.rollback(args.to))
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

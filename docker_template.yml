@@ -17,6 +17,9 @@ services:
       - NET_ADMIN
     environment:
       - FUZZAGENT_AUTO_CLEAN=${FUZZAGENT_AUTO_CLEAN:-0}
+      - HC_SESSION=${HC_SESSION:-fz-${REPO_BASE_NAME}}
+      - FUZZAGENT_ENGINE=${FUZZAGENT_ENGINE:-hc}
+      - FUZZAGENT_CONFIG=${FUZZAGENT_CONFIG:-config/campaign.yaml}
       - SRC=/root/src/${REPO_BASE_NAME}
       - OUTPUT=/root/FuzzAgent/output/${REPO_BASE_NAME}
       - AFL_SKIP_CPUFREQ=1

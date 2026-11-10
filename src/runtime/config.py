@@ -167,6 +167,7 @@ class CampaignConfig:
     max_rounds: int = 0
     round_prompt_file: str | None = None
     base_dir: str | None = None
+    snapshot_enabled: bool = True
 
     @property
     def campaign_dir(self) -> Path:
@@ -274,7 +275,10 @@ def load_campaign(path: str | Path) -> CampaignConfig:
     }
     data = _expand(data, context)
     known = {f for f in CampaignConfig.__dataclass_fields__}
-    campaign = CampaignConfig(**{k: v for k, v in data.items() if k in known})
+    payload = {k: v for k, v in data.items() if k in known}
+    snapshot_block = data.get("snapshot") or {}
+    payload["snapshot_enabled"] = bool(snapshot_block.get("enabled", True))
+    campaign = CampaignConfig(**payload)
     if campaign.base_dir is None:
         campaign.base_dir = str(path.parent.parent)
     campaign.agents_dir = _expand(campaign.agents_dir, {"REPO_ROOT": campaign.base_dir})
