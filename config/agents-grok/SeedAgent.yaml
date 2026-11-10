@@ -1,0 +1,50 @@
+role: SeedAgent
+enabled: true
+driver: grok
+launch:
+- grok
+- --model
+- grok-4.7
+- --reasoning-effort
+- high
+card: src/agents/SeedAgent/.well-know/agent.json
+home: ${OUTPUT}/.campaign/agents/SeedAgent/home
+cwd: ${OUTPUT}/.campaign/agents/SeedAgent/work
+prompt:
+  source: src.agents.SeedAgent.prompt:SYSTEM_PROMPT
+  response_format: true
+  delivery: first_send
+tools:
+  include:
+  - find_file
+  - search_file
+  - search_dir
+  - write_file
+  - open
+  - goto
+  - edit
+  - scroll_up
+  - scroll_down
+  - search_web
+  - track_web_retrieve_progress
+  - bash
+  - exit
+mcp:
+  transport: stdio
+  server: fuzzagent-mcp
+  role_arg: SeedAgent
+session:
+  policy: resume
+  id_source:
+  - index_file
+  - probe
+  reset_on:
+  - error
+dispatch:
+  block_seconds: 0
+  poll_seconds: 30
+status: native
+snapshot:
+  true: done
+  mode: artifacts
+model: grok-4.7

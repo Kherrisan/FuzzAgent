@@ -1,0 +1,40 @@
+# Campaign profile: every role runs the grok CLI (model grok-4.7, effort high).
+#
+#   bin/collect-auth                       # copies ~/.grok/auth.json to ./.cache/auth/grok
+#   export SRC=/src/cjson OUTPUT=$PWD/output/cjson HC_SESSION=fz-cjson
+#   campaignctl --config config/campaign-grok.yaml prepare
+#   campaignctl --config config/campaign-grok.yaml up --resume
+
+name: "${REPO_BASE_NAME}"
+target: "${REPO_BASE_NAME}"
+src: "${SRC}"
+output: "${OUTPUT}"
+session: "${HC_SESSION}"
+
+duration_hours: 24
+coverage_guidance: true
+
+engine: hc
+manager_role: ManagerAgent
+agents_dir: config/agents-grok
+
+# Every role gets the host machine's grok credentials, copied into its own
+# isolated HOME before the terminal starts.
+auth_config: config/agent_auth-grok.toml
+
+max_rounds: 0
+
+hc:
+  binary: hc
+  session: "${HC_SESSION}"
+  wait_timeout: 300
+  poll_seconds: 30
+  keep: true
+  outlive_parent: true
+
+snapshot:
+  enabled: true
+
+resume:
+  mode: auto
+  brief_tasks: 10

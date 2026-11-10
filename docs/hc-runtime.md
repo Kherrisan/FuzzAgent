@@ -76,6 +76,27 @@ them into that role's isolated `HOME` with mode `0600`:
 - Role homes are added to `$OUTPUT/.gitignore` (`.campaign/agents/*/home/`) so
   VMS snapshots never commit credentials or session stores.
 
+## Grok-only profile
+
+`config/campaign-grok.yaml` + `config/agents-grok/` run **every** role with the
+grok CLI, pinned to `grok-4.7` and `--reasoning-effort high`, reusing the host
+machine's grok credentials:
+
+```bash
+bin/collect-auth                       # ~/.grok/auth.json -> ./.cache/auth/grok
+export SRC=/src/cjson OUTPUT=$PWD/output/cjson HC_SESSION=fz-cjson
+export HOST_AUTH_DIR=/run/fuzzagent-auth
+campaignctl --config config/campaign-grok.yaml prepare
+campaignctl --config config/campaign-grok.yaml up --resume
+campaignctl --config config/campaign-grok.yaml doctor
+```
+
+- launch line per role: `grok --model grok-4.7 --reasoning-effort high`
+- `config/agent_auth-grok.toml` maps all eight roles to `.grok/auth.json`
+  sourced from `${HOST_AUTH_DIR}/grok/auth.json` (mode 0600, per-role HOME).
+- Verified locally: `prepare` copies the host auth into every role HOME and
+  `doctor` reports zero problems for the profile.
+
 ## Running
 
 ```bash

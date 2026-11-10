@@ -1,0 +1,49 @@
+role: FuzzerExecutorAgent
+enabled: true
+driver: grok
+launch:
+- grok
+- --model
+- grok-4.7
+- --reasoning-effort
+- high
+model: grok-4.7
+card: src/agents/FuzzerExecutorAgent/.well-know/agent.json
+home: ${OUTPUT}/.campaign/agents/FuzzerExecutorAgent/home
+cwd: ${OUTPUT}/.campaign/agents/FuzzerExecutorAgent/work
+prompt:
+  source: src.agents.FuzzerExecutorAgent.prompt:SYSTEM_PROMPT
+  response_format: true
+  delivery: first_send
+tools:
+  include:
+  - find_file
+  - search_file
+  - search_dir
+  - write_file
+  - open
+  - goto
+  - edit
+  - scroll_up
+  - scroll_down
+  - run_fuzz_target
+  - bash
+  - exit
+mcp:
+  transport: stdio
+  server: fuzzagent-mcp
+  role_arg: FuzzerExecutorAgent
+session:
+  policy: resume
+  id_source:
+  - index_file
+  - probe
+  reset_on:
+  - error
+dispatch:
+  block_seconds: 0
+  poll_seconds: 30
+status: native
+snapshot:
+  true: done
+  mode: artifacts

@@ -1,0 +1,46 @@
+role: ManagerAgent
+enabled: true
+driver: grok
+launch:
+- grok
+- --model
+- grok-4.7
+- --reasoning-effort
+- high
+model: grok-4.7
+card: src/agents/ManagerAgent/.well-know/agent.json
+home: ${OUTPUT}/.campaign/agents/ManagerAgent/home
+cwd: ${OUTPUT}/.campaign/agents/ManagerAgent/work
+prompt:
+  source: src.agents.ManagerAgent.prompt:SYSTEM_PROMPT
+  guidance_variant: src.agents.ManagerAgent.prompt:NO_COVERAGE_GUIDANCE_SYSTEM_PROMPT
+  response_format: true
+  delivery: first_send
+tools:
+  include:
+  - open
+  - goto
+  - scroll_up
+  - scroll_down
+  - observe_current_states
+  - bash
+  - send_agent_task
+  - exit
+mcp:
+  transport: stdio
+  server: fuzzagent-mcp
+  role_arg: ManagerAgent
+session:
+  policy: resume
+  id_source:
+  - index_file
+  - probe
+  reset_on:
+  - error
+dispatch:
+  block_seconds: 0
+  poll_seconds: 30
+status: native
+snapshot:
+  true: done
+  mode: artifacts
