@@ -53,6 +53,29 @@ The tool allowlists are the legacy ones, so the prompts keep working; the MCP
 schemas are byte-identical to the legacy OpenAI function schemas (covered by
 `tests/runtime/test_registry_parity.py`).
 
+## Auth files
+
+Agent CLIs keep credentials in their own files; the image does not bake them in.
+`config/agent_auth.toml` lists them per role and `campaignctl prepare` copies
+them into that role's isolated `HOME` with mode `0600`:
+
+```toml
+[HarnessAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[DictionaryAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+```
+
+- `bin/collect-auth` copies the local CLI credentials (`~/.codex/auth.json`,
+  `~/.grok/auth.json`, `~/.pi/agent/auth.json`, `~/.dsh/auth.json`) into
+  `./.cache/auth`, which compose mounts read-only at `/run/fuzzagent-auth`.
+- Missing sources are skipped and reported by `campaignctl doctor`
+  (`<role>: auth source missing: ...`); contents are never printed or
+  journalled.
+- Role homes are added to `$OUTPUT/.gitignore` (`.campaign/agents/*/home/`) so
+  VMS snapshots never commit credentials or session stores.
+
 ## Running
 
 ```bash

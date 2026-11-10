@@ -165,6 +165,10 @@ class CampaignController:
         except Exception as exc:  # noqa: BLE001
             problems.append(f"hc unavailable: {exc}")
         problems.extend(guards.verify_artifacts(self.paths))
+        for role, entries in self.orchestrator.auth_spec.items():
+            for entry in entries:
+                if not Path(entry.source).is_file():
+                    problems.append(f"{role}: auth source missing: {entry.source}")
         return {"problems": problems, "binaries": binaries, "hc": hc_version}
 
     def rollback(self, target: str) -> str:

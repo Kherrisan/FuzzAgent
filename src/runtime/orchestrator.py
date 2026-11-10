@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import artifacts, guards, prompts
+from . import artifacts, auth, guards, prompts
 from .config import AgentConfig, CampaignConfig
 from .drivers import driver_for
 from .hc import HC, HCError, Terminal
@@ -46,6 +46,7 @@ class Orchestrator:
         self.paths = artifacts.ProjectPaths(Path(campaign.src), Path(campaign.output), self.campaign_dir)
         self._counter = 0
         self.observer = observer or (lambda: artifacts.observe_current_states(self.paths))
+        self.auth_spec = auth.load_auth_spec(campaign.auth_config)
 
     # --- layout -----------------------------------------------------------
     def role_dir(self, role: str) -> Path:
@@ -92,7 +93,26 @@ class Orchestrator:
         if agent.source_path and Path(agent.source_path).exists():
             shutil.copyfile(agent.source_path, rendered)
         driver_for(agent).prepare(agent, self.campaign, home, cwd)
+        report = auth.materialize(agent.role, home, self.auth_spec)
+        if report.copied or report.missing:
+            self.journal({"event": "auth_materialized", **report.as_dict()})
+        self._ensure_snapshot_ignores()
         return home, cwd
+
+    def _ensure_snapshot_ignores(self) -> None:
+        """Never commit per-role credential/session stores into VMS snapshots."""
+        gitignore = Path(self.campaign.output) / ".gitignore"
+        entries = [".campaign/agents/*/home/", ".campaign/agents/*/auth/"]
+        try:
+            existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+            missing = [entry for entry in entries if entry not in existing.splitlines()]
+            if missing:
+                with gitignore.open("a", encoding="utf-8") as handle:
+                    if existing and not existing.endswith("\n"):
+                        handle.write("\n")
+                    handle.write("\n".join(missing) + "\n")
+        except OSError:
+            pass
 
     def ensure_terminal(self, agent: AgentConfig) -> Terminal:
         name = self.terminal_name(agent)

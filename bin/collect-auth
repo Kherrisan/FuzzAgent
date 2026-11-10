@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Copy the local coding-agent credentials into the directory that is mounted
+# read-only into the campaign container at /run/fuzzagent-auth.
+#
+# Usage: bin/collect-auth [dest-dir]     (default: $FUZZAGENT_AUTH_DIR or ./.cache/auth)
+set -euo pipefail
+
+DEST="${1:-${FUZZAGENT_AUTH_DIR:-$PWD/.cache/auth}}"
+mkdir -p "$DEST"
+umask 077
+
+copy() { # src dest-name
+  local src="$1" name="$2"
+  if [[ -f "$src" ]]; then
+    mkdir -p "$DEST/$(dirname "$name")"
+    cp "$src" "$DEST/$name"
+    chmod 600 "$DEST/$name"
+    printf 'copied %s -> %s\n' "$src" "$DEST/$name"
+  else
+    printf 'skip   %s (not found)\n' "$src"
+  fi
+}
+
+copy "${CODEX_HOME:-$HOME/.codex}/auth.json"      codex/auth.json
+copy "${GROK_HOME:-$HOME/.grok}/auth.json"        grok/auth.json
+copy "${PI_HOME:-$HOME/.pi}/agent/auth.json"      pi/auth.json
+# dsh keeps credentials inside its profile/session store; copy the whole auth
+# file if the distribution provides one, otherwise rely on env keys.
+copy "${DSH_HOME:-$HOME/.dsh}/auth.json"          dsh/auth.json
+
+printf '\nauth bundle: %s\nmount it with FUZZAGENT_AUTH_DIR=%s\n' "$DEST" "$DEST"

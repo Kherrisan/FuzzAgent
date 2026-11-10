@@ -16,6 +16,8 @@ coverage_guidance: true
 engine: hc          # hc | legacy
 manager_role: ManagerAgent
 agents_dir: config/agents
+# Per-role credential files (dest relative to each role HOME = source path).
+auth_config: config/agent_auth.toml
 max_rounds: 0       # 0 = until the budget is exhausted
 
 hc:

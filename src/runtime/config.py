@@ -168,6 +168,7 @@ class CampaignConfig:
     round_prompt_file: str | None = None
     base_dir: str | None = None
     snapshot_enabled: bool = True
+    auth_config: str | None = "config/agent_auth.toml"
 
     @property
     def campaign_dir(self) -> Path:

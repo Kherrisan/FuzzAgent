@@ -10,6 +10,7 @@ services:
       - ${FUZZAGENT_DIR}:/root/FuzzAgent:${WRITE_MODE}
       - ${RAW_OUTPUT_DIR}:/root/FuzzAgent/output/${REPO_BASE_NAME}
       - ${SRC_DIR}:/src/${REPO_BASE_NAME}
+      - ${FUZZAGENT_AUTH_DIR:-./.cache/auth}:/run/fuzzagent-auth:ro
     security_opt:
       - seccomp=unconfined
     cap_add:
@@ -20,6 +21,7 @@ services:
       - HC_SESSION=${HC_SESSION:-fz-${REPO_BASE_NAME}}
       - FUZZAGENT_ENGINE=${FUZZAGENT_ENGINE:-hc}
       - FUZZAGENT_CONFIG=${FUZZAGENT_CONFIG:-config/campaign.yaml}
+      - HOST_AUTH_DIR=${HOST_AUTH_DIR:-/run/fuzzagent-auth}
       - SRC=/root/src/${REPO_BASE_NAME}
       - OUTPUT=/root/FuzzAgent/output/${REPO_BASE_NAME}
       - AFL_SKIP_CPUFREQ=1

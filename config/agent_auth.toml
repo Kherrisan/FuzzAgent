@@ -1,0 +1,44 @@
+# Per-role auth files copied into the agent's isolated HOME by
+# `campaignctl prepare`.  The key is the destination *relative to that role's
+# HOME*; the value is a source path readable inside the container.
+#
+# Host layout: put the files under $FUZZAGENT_AUTH_DIR (default ./.cache/auth)
+# and the compose file mounts them read-only at /run/fuzzagent-auth.
+# `bin/collect-auth` copies the known CLI locations there.
+#
+# Missing sources are reported by `campaignctl doctor` and skipped, never fatal.
+# File contents are copied with mode 0600 and never printed or journalled.
+
+# --- codex-driven roles -----------------------------------------------------
+[ManagerAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[BuilderAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[HarnessAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[CoverageAnalyzerAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[FuzzerExecutorAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[CrashAnalyzerAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+# --- grok-driven roles ------------------------------------------------------
+[DictionaryAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[SeedAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+# --- dsh-tui driver (uncomment when a role uses it) -------------------------
+# [SomeRole.files]
+# ".dsh/sessions/.keep" = "${HOST_AUTH_DIR}/dsh/session.json"
+
+# --- pi driver (uncomment when a role uses it) ------------------------------
+# [SomeRole.files]
+# ".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
