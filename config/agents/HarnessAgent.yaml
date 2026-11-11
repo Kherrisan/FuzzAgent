@@ -20,19 +20,8 @@ prompt:
 
 tools:
   include:
-    - find_file
-    - search_file
-    - search_dir
-    - write_file
-    - open
-    - goto
-    - edit
-    - scroll_up
-    - scroll_down
     - compile_and_check_harness
-    - search_web
-    - bash
-    - exit
+    - finish_task
 
 mcp: {transport: stdio, server: fuzzagent-mcp, role_arg: HarnessAgent}
 session: {policy: resume, id_source: [index_file, probe], reset_on: [error]}

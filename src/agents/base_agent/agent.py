@@ -30,7 +30,7 @@ class BaseAgent(ABC):
     aci = ACI(logger)
 
     system_prompt: str = "You are a helpful assistant."
-    tools: List[dict] = API_TOOL_CALLS.get_tool_calls(["exit", "bash"])
+    tools: List[dict] = API_TOOL_CALLS.get_tool_calls(["finish_task", "bash"])
     exit_reason = "Normal Exit"
     prompt_factory = ACIPromptFactory(
         agents=[]
@@ -90,7 +90,7 @@ class BaseAgent(ABC):
         reminder_messages = "[IMPORTANT!][WARNING!] This is a reminder message from the user. The system detected that the current token length is approaching the maximum limit.\n"
         reminder_messages += f"[IMPORTANT!][WARNING!] Token length will exceed! Current: {current_len}, Max allowed: {max_len}.\n"
         reminder_messages += "[IMPORTANT!][WARNING!] To ensure smooth operation, please summarize the previous conversation concisely right now, focusing on key points and important information only.\n"
-        reminder_messages += "[IMPORTANT!][WARNING!] Then directly invoke the 'exit' tool call with the summary as the argument to terminate the agent execution!\n"
+        reminder_messages += "[IMPORTANT!][WARNING!] Then directly invoke the 'finish_task' tool call with the summary as the argument to terminate the agent execution!\n"
         self.history_processor.extend_user_msg(content=reminder_messages)
     
     def handle_token_exceed(self, current_len: int, max_len: int):
@@ -146,7 +146,7 @@ class BaseAgent(ABC):
                     function_call, arguments = tool_call.function_call, tool_call.arguments
                     if function_call == "send_agent_task":
                         observation = self.handle_agent_action(arguments)
-                    elif function_call == "exit":
+                    elif function_call in {"finish_task", "exit"}:
                         if self.is_force_exit(arguments):
                             self.exit_reason = self.register_agent_post_call(exit_reason=str(arguments))
                             self.logger.info(msg=f"Agent forced to exit with exit reason: {self.exit_reason}")

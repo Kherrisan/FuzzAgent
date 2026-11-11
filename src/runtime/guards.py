@@ -9,6 +9,7 @@ reminder texts stay byte-identical.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -40,11 +41,57 @@ def _reminder(text: str) -> str:
     return "This is a reminder message from user.\n" + text
 
 
-def _last_index(calls: list[str], name: str) -> int:
-    for index in range(len(calls) - 1, -1, -1):
-        if calls[index] == name:
-            return index
-    return -1
+def check_stamp_path(paths: ProjectPaths, task_id: str) -> Path:
+    root = paths.campaign or paths.output / ".campaign"
+    return root / "tasks" / task_id / "check_stamp.json"
+
+
+def load_check_stamp(paths: ProjectPaths, task_id: str) -> dict[str, Any]:
+    try:
+        data = json.loads(check_stamp_path(paths, task_id).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _mtime(path: Path) -> float | None:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def record_build_stamp(paths: ProjectPaths, task_id: str, build_script: Path) -> None:
+    data = load_check_stamp(paths, task_id)
+    data["build"] = {"path": str(build_script), "mtime": _mtime(build_script)}
+    _write_stamp(paths, task_id, data)
+
+
+def record_harness_stamp(paths: ProjectPaths, task_id: str, harness: Path) -> None:
+    data = load_check_stamp(paths, task_id)
+    harnesses = data.get("harness")
+    if not isinstance(harnesses, dict):
+        harnesses = {}
+    harnesses[str(harness)] = _mtime(harness)
+    data["harness"] = harnesses
+    _write_stamp(paths, task_id, data)
+
+
+def _write_stamp(paths: ProjectPaths, task_id: str, data: dict[str, Any]) -> None:
+    path = check_stamp_path(paths, task_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def harness_source(paths: ProjectPaths, harness_id: object) -> Path:
+    return paths.harness_dir / f"harness_{int(harness_id):03d}.cpp"
+
+
+def _newer(path: Path, recorded: object) -> bool:
+    current = _mtime(path)
+    if current is None or recorded is None:
+        return True
+    return current > float(recorded)
 
 
 def pre_task(ctx: GuardContext) -> dict[str, Any]:
@@ -101,12 +148,13 @@ def check_exit(ctx: GuardContext) -> tuple[bool, str | None]:
                 "No build script running tool call found. Please make sure you have called the "
                 "tool `run_and_check_build_script` to run and check the build script.\n"
             )
-        last = _last_index(calls, "run_and_check_build_script")
-        if any(name in {"edit", "write_file"} for name in calls[last:]):
+        build = load_check_stamp(paths, ctx.task_id).get("build") or {}
+        script = Path(str(build.get("path") or paths.build_dir / "build.sh"))
+        if not isinstance(build, dict) or _newer(script, build.get("mtime")):
             return False, _reminder(
-                "Found build script editing after the last `run_and_check_build_script` tool call. "
-                "Please make sure you have called the tool `run_and_check_build_script` to run and "
-                "check the build script after each editing.\n"
+                "build.sh is missing a successful check, or it was modified after the last "
+                "`run_and_check_build_script` call. Run `run_and_check_build_script` again "
+                "after editing the build script.\n"
             )
         return True, None
 
@@ -117,12 +165,13 @@ def check_exit(ctx: GuardContext) -> tuple[bool, str | None]:
                 "No compile and check harness tool call found. Please make sure you have called the "
                 "tool `compile_and_check_harness` to compile and check the harness.\n"
             )
-        last = _last_index(calls, "compile_and_check_harness")
-        if any(name in {"edit", "write_file"} for name in calls[last:]):
+        harnesses = load_check_stamp(paths, ctx.task_id).get("harness") or {}
+        if not isinstance(harnesses, dict) or not harnesses or any(
+            _newer(Path(path), recorded) for path, recorded in harnesses.items()
+        ):
             return False, _reminder(
-                "Found harness editing after the last `compile_and_check_harness` tool call. Please "
-                "make sure you have called the tool `compile_and_check_harness` to compile the "
-                "harness after each editing.\n"
+                "A harness source is missing a successful check, or it was modified after the last "
+                "`compile_and_check_harness` call. Compile the harness again after editing it.\n"
             )
         return True, None
 

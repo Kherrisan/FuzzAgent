@@ -18,14 +18,10 @@ prompt:
   delivery: first_send
 tools:
   include:
-  - open
-  - goto
-  - scroll_up
-  - scroll_down
   - observe_current_states
-  - bash
   - send_agent_task
-  - exit
+  - wait_agent_task
+  - finish_task
 mcp:
   transport: stdio
   server: fuzzagent-mcp

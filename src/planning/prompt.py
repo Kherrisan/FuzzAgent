@@ -8,7 +8,7 @@ Your response must follow the following format:
 --- BEGIN OF EXAMPLE ---
 **Reasoning**: The last function call get the location of source code directory.
 **Thought**: First, I will check source directory contents.
-**Action**: I will call the `bash` function to check source directory contents.
+**Action**: I will use my shell to check the source directory contents.
 --- END OF EXAMPLE ---
 """
 
@@ -38,7 +38,7 @@ Base on the previous interaction with the system, plan the next action you want 
 --- BEGIN OF EXAMPLE ---
 **Reasoning**: The last function call get the location of source code directory.
 **Thought**: First, I will check source directory contents.
-**Action**: I will call the `bash` function to check source directory contents.
+**Action**: I will use my shell to check the source directory contents.
 --- END OF EXAMPLE ---
 """
 

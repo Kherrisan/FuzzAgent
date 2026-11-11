@@ -26,7 +26,7 @@ class DictionaryAgent(BaseAgent):
             "validate_dictionary_file",
             "track_web_retrieve_progress",
             "search_web",
-            "exit",
+            "finish_task",
             "bash"
         ]
     )

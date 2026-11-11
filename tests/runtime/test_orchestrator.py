@@ -19,6 +19,7 @@ class FakeHC:
         self.terminals: dict[str, Terminal] = {}
         self.sent: list[str] = []
         self.launched: list[list[str]] = []
+        self.killed: list[str] = []
 
     def get(self, name: str):
         return self.terminals.get(name)
@@ -49,10 +50,16 @@ class FakeHC:
     def remove(self, name):
         self.terminals.pop(name, None)
 
+    def kill(self, name):
+        self.killed.append(name)
+
+    def keys(self, name, key):
+        return None
+
 
 class OrchestratorStub(Orchestrator):
     def collect_report(self, directory: Path, agent):
-        (directory / "exit.json").write_text(
+        (directory / "finish_task.json").write_text(
             json.dumps({"report": f"finished {agent.role}", "allowed": True}), encoding="utf-8"
         )
         return f"finished {agent.role}"
@@ -139,3 +146,49 @@ def test_blocked_terminal_is_reported(orchestrator):
         fake.wait_turn = original  # type: ignore[assignment]
     assert "blocked waiting for a person" in result
     assert "Trust this folder?" in result
+
+
+def test_nonblocking_dispatch_returns_without_waiting(orchestrator, campaign):
+    orch, fake = orchestrator
+    waited = {"called": False}
+
+    def boom(*args, **kwargs):
+        waited["called"] = True
+        raise AssertionError("wait_turn")
+
+    fake.wait_turn = boom  # type: ignore[assignment]
+    text = orch.dispatch("HarnessAgent", "compile it", wait=False)
+    assert waited["called"] is False
+    assert text.startswith("Dispatched HarnessAgent as ")
+    assert text.endswith("on terminal harnessagent.")
+    assert "finish_task" in fake.sent[0]
+    tasks = sorted((Path(campaign.output) / ".campaign" / "tasks").iterdir())
+    meta = json.loads((tasks[0] / "meta.json").read_text())
+    assert meta["status"] == "running"
+    task_id = text.split(" as ", 1)[1].split(" on ", 1)[0]
+    assert task_id == meta["task_id"]
+    marker = Path(campaign.output) / ".campaign" / "agents" / "HarnessAgent" / "current_task"
+    assert marker.read_text().strip() == task_id
+    journal = (Path(campaign.output) / ".campaign" / "journal.jsonl").read_text().splitlines()
+    events = [json.loads(line)["event"] for line in journal]
+    assert "dispatch" in events
+    assert "finished" not in events
+
+    again = orch.dispatch("HarnessAgent", "compile the next one", wait=False)
+    assert fake.killed == ["harnessagent"]
+    assert again.startswith("Dispatched HarnessAgent as ")
+    assert again.split(" as ", 1)[1].split(" on ", 1)[0] != task_id
+
+
+def test_poll_task_reads_finish_file(orchestrator, campaign):
+    orch, _ = orchestrator
+    task_id = "HarnessAgent-9"
+    directory = Path(campaign.output) / ".campaign" / "tasks" / task_id
+    directory.mkdir(parents=True)
+    assert orch.poll_task(task_id) == f"Task {task_id} is not finished."
+    (directory / "finish_task.json").write_text(
+        json.dumps({"report": "built the library"}), encoding="utf-8"
+    )
+    text = orch.poll_task(task_id)
+    assert text.startswith("built the library\n")
+    assert "current states of the fuzzing tasks" in text

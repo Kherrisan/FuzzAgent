@@ -62,6 +62,9 @@ class CampaignController:
             "output": self.campaign.output,
             "session": self.campaign.session,
             "duration_hours": self.campaign.duration_hours,
+            "agents_dir": str(Path(self.campaign.agents_dir).resolve()),
+            "base_dir": self.campaign.base_dir,
+            "snapshot_enabled": self.campaign.snapshot_enabled,
             "started": time.time(),
         }
         (self.orchestrator.campaign_dir / "campaign.json").write_text(

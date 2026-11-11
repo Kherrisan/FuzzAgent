@@ -26,7 +26,7 @@ class SeedAgent(BaseAgent):
             "scroll_down",
             "search_web",
             "track_web_retrieve_progress",
-            "exit",
+            "finish_task",
             "bash"
         ]
     )

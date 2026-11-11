@@ -27,7 +27,7 @@ class CoverageAnalyzerAgent(BaseAgent):
             "show_branch_blocker_code_coverage",
             "call_chain_analysis",
             "generate_coverage_guidance_report",
-            "exit",
+            "finish_task",
             "bash"
         ]
     )

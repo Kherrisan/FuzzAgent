@@ -19,20 +19,10 @@ prompt:
 
 tools:
   include:
-    - find_file
-    - search_file
-    - search_dir
-    - open
-    - goto
-    - edit
-    - write_file
-    - scroll_up
-    - scroll_down
     - crash_artifact_analysis
     - crash_debugger
     - generate_crash_report
-    - bash
-    - exit
+    - finish_task
 
 mcp: {transport: stdio, server: fuzzagent-mcp, role_arg: CrashAnalyzerAgent}
 session: {policy: resume, id_source: [index_file, probe], reset_on: [error]}

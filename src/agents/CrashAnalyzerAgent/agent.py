@@ -23,7 +23,7 @@ class CrashAnalyzerAgent(BaseAgent):
             "crash_artifact_analysis",
             "crash_debugger",
             "generate_crash_report",
-            "exit",
+            "finish_task",
             "bash"
         ]
     )

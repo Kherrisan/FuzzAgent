@@ -19,11 +19,6 @@ prompt:
 
 tools:
   include:
-    - open
-    - goto
-    - scroll_up
-    - scroll_down
-    - find_file
     - show_overview_code_coverage
     - show_module_code_coverage
     - show_file_code_coverage
@@ -32,8 +27,7 @@ tools:
     - show_branch_blocker_code_coverage
     - call_chain_analysis
     - generate_coverage_guidance_report
-    - bash
-    - exit
+    - finish_task
 
 mcp: {transport: stdio, server: fuzzagent-mcp, role_arg: CoverageAnalyzerAgent}
 session: {policy: resume, id_source: [index_file, probe], reset_on: [error]}

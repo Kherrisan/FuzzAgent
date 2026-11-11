@@ -24,7 +24,7 @@ class HarnessAgent(BaseAgent):
             "scroll_down",
             "compile_and_check_harness",
             "search_web",
-            "exit",
+            "finish_task",
             "bash"
         ]
     )

@@ -24,7 +24,7 @@ class BuilderAgent(BaseAgent):
             "run_and_check_build_script",
             "search_web",
             "bash",
-            "exit"
+            "finish_task"
         ]
     )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -30,18 +31,47 @@ def campaign(tmp_path: Path) -> CampaignConfig:
     )
 
 
+BUILTIN_TOOLS = {
+    "bash",
+    "open",
+    "goto",
+    "scroll_up",
+    "scroll_down",
+    "edit",
+    "undo_edit",
+    "write_file",
+    "write_bin_to_file",
+    "find_file",
+    "search_file",
+    "search_dir",
+    "search_web",
+}
+
+
 def test_every_role_is_loadable_and_renders(campaign: CampaignConfig):
-    agents = load_agents(REPO / "config" / "agents", {"OUTPUT": campaign.output, "SRC": campaign.src})
-    assert len(agents) == 8, sorted(agents)
     registry = load_tools()
-    for agent in agents.values():
-        rendered = render_agent(agent, campaign)
-        assert rendered.home.startswith(campaign.output), rendered.role
-        assert rendered.cwd.startswith(campaign.output), rendered.role
-        assert "HERDR_ENV" in rendered.env_scrub
-        missing = [name for name in rendered.tools.enabled if name not in registry]
-        assert not missing, f"{rendered.role}: unknown tools {missing}"
-        assert "exit" in rendered.tools.enabled, rendered.role
+    for folder in ("agents", "agents-grok"):
+        agents = load_agents(REPO / "config" / folder, {"OUTPUT": campaign.output, "SRC": campaign.src})
+        assert len(agents) == 8, sorted(agents)
+        for agent in agents.values():
+            rendered = render_agent(agent, campaign)
+            enabled = set(rendered.tools.enabled)
+            assert rendered.home.startswith(campaign.output), rendered.role
+            assert rendered.cwd.startswith(campaign.output), rendered.role
+            assert "HERDR_ENV" in rendered.env_scrub
+            missing = [name for name in rendered.tools.enabled if name not in registry]
+            assert not missing, f"{rendered.role}: unknown tools {missing}"
+            assert not enabled & BUILTIN_TOOLS, rendered.role
+            assert "finish_task" in enabled, rendered.role
+            assert "exit" not in enabled, rendered.role
+            assert rendered.mcp.transport == "stdio", rendered.role
+            assert rendered.mcp.server == "fuzzagent-mcp", rendered.role
+            if rendered.role == "ManagerAgent":
+                assert "send_agent_task" in enabled
+                assert "wait_agent_task" in enabled
+            else:
+                assert "send_agent_task" not in enabled, rendered.role
+                assert "wait_agent_task" not in enabled, rendered.role
 
 
 def test_manager_prompt_has_no_coverage_variant():
@@ -66,11 +96,11 @@ def test_tool_disable_wins(tmp_path: Path):
     path = tmp_path / "A.yaml"
     path.write_text(
         "role: A\ndriver: generic\nlaunch: [x]\nhome: /tmp/h\ncwd: /tmp/w\n"
-        "prompt: {source: 'm:A'}\ntools: {include: [bash, exit], disable: [bash]}\n",
+        "prompt: {source: 'm:A'}\ntools: {include: [bash, finish_task], disable: [bash]}\n",
         encoding="utf-8",
     )
     agent = load_agent(path)
-    assert agent.tools.enabled == ["exit"]
+    assert agent.tools.enabled == ["finish_task"]
 
 
 def test_campaign_file_roundtrip(campaign: CampaignConfig, tmp_path: Path):
@@ -83,3 +113,24 @@ def test_campaign_file_roundtrip(campaign: CampaignConfig, tmp_path: Path):
     loaded = load_campaign(path)
     assert loaded.session == "fz-cjson"
     assert loaded.engine == "hc"
+
+
+def test_drivers_still_launch_fuzzagent_mcp_over_stdio(campaign: CampaignConfig, tmp_path: Path):
+    from src.runtime.drivers import driver_for
+
+    agent = render_agent(load_agent(REPO / "config" / "agents" / "ManagerAgent.yaml"), campaign)
+    agent.home = str(tmp_path / "home")
+    agent.cwd = str(tmp_path / "work")
+    for driver_name in ("codex", "grok", "pi"):
+        agent.driver = driver_name
+        home = tmp_path / driver_name
+        driver_for(agent).prepare(agent, campaign, home, Path(agent.cwd))
+    codex = (tmp_path / "codex" / ".codex" / "config.toml").read_text(encoding="utf-8")
+    assert 'command = "fuzzagent-mcp"' in codex
+    assert 'args = ["--role", "ManagerAgent"]' in codex
+    grok = (tmp_path / "grok" / ".grok" / "config.toml").read_text(encoding="utf-8")
+    assert 'command = "fuzzagent-mcp"' in grok
+    assert 'args = ["--role", "ManagerAgent"]' in grok
+    pi = json.loads((tmp_path / "pi" / ".pi" / "agent" / "mcp.json").read_text(encoding="utf-8"))
+    assert pi["mcpServers"]["fuzzagent"]["command"] == "fuzzagent-mcp"
+    assert pi["mcpServers"]["fuzzagent"]["args"] == ["--role", "ManagerAgent"]

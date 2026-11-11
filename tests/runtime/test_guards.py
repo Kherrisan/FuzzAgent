@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 
 import pytest
 
 from src.runtime.artifacts import ProjectPaths
-from src.runtime.guards import GuardContext, check_exit, post_report, pre_task, verify_artifacts
+from src.runtime.guards import (
+    GuardContext,
+    check_exit,
+    post_report,
+    pre_task,
+    record_build_stamp,
+    record_harness_stamp,
+    verify_artifacts,
+)
 
 
 @pytest.fixture()
@@ -44,23 +54,69 @@ def test_builder_requires_a_build_call(paths: ProjectPaths):
     assert "No build script running tool call found" in reminder
 
 
-def test_builder_rejects_edits_after_the_build(paths: ProjectPaths):
+def test_builder_rejects_a_missing_or_newer_build_script(paths: ProjectPaths):
     ctx = GuardContext(
         role="BuilderAgent",
         paths=paths,
-        tool_calls=["run_and_check_build_script", "edit"],
+        task_id="build-1",
+        tool_calls=["run_and_check_build_script"],
     )
     pre_task(ctx)
     allowed, reminder = check_exit(ctx)
     assert not allowed
-    assert "Found build script editing after the last" in reminder
+    assert "missing a successful check" in reminder
+
+    script = paths.build_dir / "build.sh"
+    script.write_text("echo old\n")
+    record_build_stamp(paths, "build-1", script)
+    future = time.time() + 5
+    os.utime(script, (future, future))
+    allowed, reminder = check_exit(ctx)
+    assert not allowed
+    assert "modified after the last" in reminder
 
 
-def test_builder_accepts_build_after_last_edit(paths: ProjectPaths):
+def test_builder_accepts_a_checked_build_script(paths: ProjectPaths):
+    script = paths.build_dir / "build.sh"
+    script.write_text("echo ok\n")
+    record_build_stamp(paths, "build-1", script)
     ctx = GuardContext(
         role="BuilderAgent",
         paths=paths,
+        task_id="build-1",
         tool_calls=["edit", "run_and_check_build_script"],
+    )
+    pre_task(ctx)
+    assert check_exit(ctx) == (True, None)
+
+
+def test_harness_rejects_a_newer_source(paths: ProjectPaths):
+    source = paths.harness_dir / "harness_000.cpp"
+    source.write_text("int x;\n")
+    record_harness_stamp(paths, "harness-1", source)
+    future = time.time() + 5
+    os.utime(source, (future, future))
+    ctx = GuardContext(
+        role="HarnessAgent",
+        paths=paths,
+        task_id="harness-1",
+        tool_calls=["compile_and_check_harness"],
+    )
+    pre_task(ctx)
+    allowed, reminder = check_exit(ctx)
+    assert not allowed
+    assert "modified after the last" in reminder
+
+
+def test_harness_accepts_a_checked_source(paths: ProjectPaths):
+    source = paths.harness_dir / "harness_000.cpp"
+    source.write_text("int x;\n")
+    record_harness_stamp(paths, "harness-1", source)
+    ctx = GuardContext(
+        role="HarnessAgent",
+        paths=paths,
+        task_id="harness-1",
+        tool_calls=["compile_and_check_harness"],
     )
     pre_task(ctx)
     assert check_exit(ctx) == (True, None)

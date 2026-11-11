@@ -21,15 +21,23 @@ tools:
         type: string
         description: The detailed description of the task to send to the agent.
         required: true
-  exit:
-    signature: exit <exit_reason> <force>
-    docstring: Exit the task. You can only exit the task when you are sure your task is finished. 
+  finish_task:
+    signature: finish_task <exit_reason> <force>
+    docstring: Finish the task. You can only finish the task when you are sure it is done.
     arguments:
       - name: exit_reason
         type: string
-        description: The reason to exit the task. You should always report your task status before exiting the task.
+        description: The reason to finish the task. Report the task status before finishing.
         required: true
       - name: force
         type: boolean
-        description: Force to exit the task regardless of user reminders and restrictions. Only use this option when you encountered fatal errors and cannot be fixed in current task loop.
+        description: Finish even if the guards would reject it. Use this only for a fatal error that cannot be fixed in the current task.
         required: false
+  wait_agent_task:
+    signature: wait_agent_task <task_id>
+    docstring: Check whether a task dispatched with send_agent_task has finished. Returns immediately.
+    arguments:
+      - name: task_id
+        type: string
+        description: The task id returned by send_agent_task.
+        required: true

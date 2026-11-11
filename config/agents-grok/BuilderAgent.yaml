@@ -17,19 +17,8 @@ prompt:
   delivery: first_send
 tools:
   include:
-  - find_file
-  - search_file
-  - search_dir
-  - write_file
-  - open
-  - goto
-  - edit
-  - scroll_up
-  - scroll_down
   - run_and_check_build_script
-  - search_web
-  - bash
-  - exit
+  - finish_task
 mcp:
   transport: stdio
   server: fuzzagent-mcp

@@ -2,7 +2,7 @@
 
 This is the piece that replaces ``ManagerAgent.handle_agent_action``: it writes
 the task, wakes the target agent through hc, waits for the turn to end, reads
-the report the agent submitted through the ``exit`` tool, snapshots the tree and
+the report the agent submitted through the ``finish_task`` tool, snapshots the tree and
 returns the same ``report + observe_current_states`` string the legacy manager
 saw.
 """
@@ -168,12 +168,11 @@ class Orchestrator:
         self._counter += 1
         return f"{role}-{int(time.time())}-{self._counter}"
 
-    def dispatch(self, role: str, task: str) -> str:
+    def dispatch(self, role: str, task: str, *, wait: bool = True) -> str:
         agent = self.agents.get(role)
         if agent is None or not agent.enabled:
             raise ValueError(f"unknown or disabled agent {role!r}")
 
-        terminal = self.ensure_terminal(agent)
         task_id = self.new_task_id(role)
         directory = self.task_dir(task_id)
         directory.mkdir(parents=True, exist_ok=True)
@@ -184,15 +183,25 @@ class Orchestrator:
         task_file = directory / "task.md"
         task_file.write_text(task, encoding="utf-8")
         (directory / "task_with_context.md").write_text(body, encoding="utf-8")
-        (self.role_dir(role) / "current_task").write_text(task_id, encoding="utf-8")
+        marker = self.role_dir(role) / "current_task"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(task_id, encoding="utf-8")
 
+        name = self.terminal_name(agent)
+        if not wait:
+            existing = self.hc.get(name)
+            if existing is not None:
+                self.hc.kill(name)
+                self.hc.remove(name)
+
+        terminal = self.ensure_terminal(agent)
         state = self.read_state(role)
         primed = bool(state.get("primed"))
         context_file = directory / "task_with_context.md"
         if primed:
             message = (
                 f"Read your next task from {context_file} and execute it. "
-                "Call the exit tool when the task is done."
+                "Call the finish_task tool when the task is done."
             )
         else:
             prime_file = self.role_dir(role) / "prime.md"
@@ -201,19 +210,22 @@ class Orchestrator:
             )
             message = (
                 f"Your role instructions are in {prime_file}; read that file completely and follow it. "
-                f"Your first task is in {context_file}. Call the exit tool when the task is done."
+                f"Your first task is in {context_file}. Call the finish_task tool when the task is done."
             )
         previous_turn = terminal.turn
         record = TaskRecord(task_id=task_id, role=role, started=time.time(), terminal=terminal.address)
         self.journal({"event": "dispatch", "task": task_id, "role": role, "task_text": task[:400]})
 
         try:
-            sent = self.hc.send(self.terminal_name(agent), message, if_idle=True)
+            sent = self.hc.send(name, message, if_idle=True)
             if sent.get("started") is False:
                 raise HCError(f"send to {role} did not start: {sent}")
             self.write_state(role, primed=True)
+            if not wait:
+                self._write_running(record, directory)
+                return f"Dispatched {role} as {task_id} on terminal {name}."
             terminal = self.hc.wait_turn(
-                self.terminal_name(agent),
+                name,
                 previous_turn=previous_turn,
                 timeout=int(agent.dispatch.block_seconds or 24 * 3600),
             )
@@ -226,24 +238,51 @@ class Orchestrator:
 
         if terminal.is_blocked:
             record.report = f"Agent is blocked waiting for a person: {terminal.blocked_message}"
-            (directory / "screen.log").write_text(self.hc.read(self.terminal_name(agent), 200), encoding="utf-8")
+            (directory / "screen.log").write_text(self.hc.read(name, 200), encoding="utf-8")
         else:
             record.report = self.collect_report(directory, agent)
 
         self._finish(record, directory, status)
         return self._legacy_response(role, record.report)
 
-    def collect_report(self, directory: Path, agent: AgentConfig) -> str:
-        exit_file = directory / "exit.json"
+    def poll_task(self, task_id: str) -> str:
+        """Return immediately. A missing finish file means the child is not done."""
+        directory = self.task_dir(task_id)
+        finish = directory / "finish_task.json"
         try:
-            data = json.loads(exit_file.read_text(encoding="utf-8"))
+            data = json.loads(finish.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return f"Task {task_id} is not finished."
+        role = task_id.split("-", 1)[0]
+        try:
+            meta = json.loads((directory / "meta.json").read_text(encoding="utf-8"))
+            role = str(meta.get("role") or role)
+        except (OSError, json.JSONDecodeError):
+            pass
+        return self._legacy_response(role, str(data.get("report", "")))
+
+    def collect_report(self, directory: Path, agent: AgentConfig) -> str:
+        finish_file = directory / "finish_task.json"
+        try:
+            data = json.loads(finish_file.read_text(encoding="utf-8"))
             return str(data.get("report", ""))
         except (OSError, json.JSONDecodeError):
             pass
         screen = self.hc.read(self.terminal_name(agent), 200)
         (directory / "screen.log").write_text(screen, encoding="utf-8")
         tail = "\n".join(screen.splitlines()[-40:])
-        return f"[no exit tool call recorded; terminal tail]\n{tail}"
+        return f"[no finish_task call recorded; terminal tail]\n{tail}"
+
+    def _write_running(self, record: TaskRecord, directory: Path) -> None:
+        record.status = "running"
+        meta = {
+            "task_id": record.task_id,
+            "role": record.role,
+            "status": "running",
+            "started": record.started,
+            "terminal": record.terminal,
+        }
+        (directory / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     def _finish(self, record: TaskRecord, directory: Path, status: str) -> None:
         record.status = status

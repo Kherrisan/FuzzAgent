@@ -23,7 +23,7 @@ class FuzzerExecutorAgent(BaseAgent):
             "scroll_up",
             "scroll_down",
             "run_fuzz_target",
-            "exit",
+            "finish_task",
             "bash"
         ]
     )

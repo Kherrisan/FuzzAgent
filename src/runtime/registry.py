@@ -20,7 +20,7 @@ TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
 SOURCE_TOOL_LIST = {"open", "goto", "find_file", "edit", "scroll_down", "scroll_up"}
 
 # Tools the runtime implements itself (not shell scripts).
-ORCHESTRATION_TOOLS = {"send_agent_task", "exit", "observe_current_states"}
+ORCHESTRATION_TOOLS = {"send_agent_task", "wait_agent_task", "finish_task", "observe_current_states"}
 
 
 @dataclass(frozen=True)
