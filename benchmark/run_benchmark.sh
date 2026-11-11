@@ -24,7 +24,9 @@ if [[ "$ENGINE" == "hc" ]]; then
         resume_args+=(--resume)
     fi
     exec timeout --signal=INT --kill-after=60s "$BENCHMARK_DURATION" \
-        campaignctl --config "$CONFIG" up "${resume_args[@]}"
+        CTL="campaignctl"
+        [[ -x /root/FuzzAgent/bin/campaignctl ]] && CTL=/root/FuzzAgent/bin/campaignctl
+        "$CTL" --config "$CONFIG" up "${resume_args[@]}"
 fi
 
 echo "Starting FuzzAgent benchmark for $BENCHMARK_DURATION."
