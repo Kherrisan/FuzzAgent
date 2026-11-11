@@ -13,6 +13,8 @@ services:
       - ${FUZZAGENT_AUTH_DIR:-./.cache/auth}:/run/fuzzagent-auth:ro
     security_opt:
       - seccomp=unconfined
+      # bubblewrap needs to create namespaces; AppArmor blocks it on some hosts.
+      - apparmor=unconfined
     cap_add:
       - SYS_ADMIN
       - NET_ADMIN
