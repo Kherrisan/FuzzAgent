@@ -56,21 +56,11 @@ Install Docker Engine and the Docker Compose plugin using the [official guide](h
 docker buildx build -t fuzzagent -f docker/Dockerfile .
 ```
 
-### 2. Configure your LLM
+### 2. Configure agent credentials
 
-```bash
-cp .env_template .env
-```
+For the default hc runtime, collect the installed agent CLIs' credentials with `bin/collect-auth`. The launcher uses `.cache/auth` by default; pass `--auth-dir` to use another bundle. Individual roles and models are configured in `config/agents/`.
 
-Edit `.env` with your endpoint, API key, and model:
-
-```dotenv
-OPENAI_BASE_URL=https://api.example.com/v1
-OPENAI_API_KEY=your-api-key
-OPENAI_MODEL=your-model
-```
-
-A GitHub token is optional. Create one at [github.com/settings/tokens](https://github.com/settings/tokens) and set `GITHUB_TOKEN` in `.env` to enable GitHub search.
+For the legacy runtime, supply `--engine legacy --api-key <key> --model <model>` and optionally `--api-base-url <url>`. Use `--github-token <token>` to enable GitHub search. Credentials passed as arguments may be visible in shell history and process listings.
 
 ### 3. Launch a benchmark
 
@@ -78,7 +68,7 @@ A GitHub token is optional. Create one at [github.com/settings/tokens](https://g
 ./benchmark/run.sh launch https://github.com/DaveGamble/cJSON.git
 ```
 
-The launcher clones the repository and starts `fuzzagent-cjson` in the background. You can also pass a local source directory, for example `./benchmark/run.sh launch /path/to/cJSON`. The default campaign runs for **24 hours**; set `FUZZING_DURATION=10m` for a shorter run. Source and output paths are configured automatically.
+The launcher clones the repository and starts `fuzzagent-cjson` in the background. You can also pass a local source directory, for example `./benchmark/run.sh launch /path/to/cJSON`. The default campaign runs for **24 hours**; pass `--duration 10m` for a shorter run. Run `./benchmark/run.sh --help` for all options and defaults.
 
 By default, results go to `output/<target>`. To choose a different directory, pass `--output`:
 
@@ -91,10 +81,12 @@ For hc campaigns started by this launcher, resume from the output directory or o
 
 ```bash
 ./benchmark/run.sh resume output/cjson
-./benchmark/run.sh tui fuzzagent-cjson
+./benchmark/run.sh tui --output output/cjson
 ```
 
 Resume starts a new duration budget and requires the launcher's saved metadata and working source under the output directory. It preserves campaign artifacts and agent sessions. A new launch refuses to use a nonempty output directory.
+
+The TUI command reads the container name from the output directory's `.campaign/launcher.json`. You can also pass a container name directly, for example `./benchmark/run.sh tui fuzzagent-cjson`.
 
 Each hc agent uses its own persistent home at `<output>/.campaign/agents/<role>/home`, including its `.codex`, `.grok`, or other CLI directory. Credentials are initially copied from the configured auth bundle; existing credentials are preserved on restart. To replace credentials, update the relevant file in the role's home or remove it so the next preparation copies it from the bundle.
 

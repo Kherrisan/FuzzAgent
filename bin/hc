@@ -1,0 +1,5 @@
+#!/bin/sh
+# Agent HOME directories are longer than sockaddr_un (107 bytes). The campaign
+# core was started with the short state dir below; always talk to that socket.
+export XDG_STATE_HOME=/root/.local/state
+exec /usr/local/bin/hc "$@"

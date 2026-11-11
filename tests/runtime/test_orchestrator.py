@@ -19,6 +19,7 @@ class FakeHC:
         self.terminals: dict[str, Terminal] = {}
         self.sent: list[str] = []
         self.launched: list[list[str]] = []
+        self.launch_labels: list[dict[str, str]] = []
         self.killed: list[str] = []
 
     def get(self, name: str):
@@ -27,13 +28,14 @@ class FakeHC:
     def run_bg(self, name, argv, cwd=None, env=None, labels=None, parent=None, keep=True,
                outlive_parent=True, scrub_env=None):
         self.launched.append(list(argv))
+        self.launch_labels.append(dict(labels or {}))
         terminal = Terminal(
             address="t1", name=name, state="live", status={"state": "idle"}, reported=True, turn=0
         )
         self.terminals[name] = terminal
         return terminal
 
-    def send(self, name, text, if_idle=True, force=False):
+    def send(self, name, text, if_not_working=True, force=False):
         self.sent.append(text)
         self.terminals[name].turn += 1
         return {"started": True}
@@ -93,6 +95,7 @@ def test_first_dispatch_primes_the_agent(orchestrator, campaign):
     orch, fake = orchestrator
     result = orch.dispatch("HarnessAgent", "write harness_000")
     assert "finished HarnessAgent" in result
+    assert fake.launch_labels[0]["herdr.space"] == "HarnessAgent"
     assert "This is the current states of the fuzzing tasks" in result
     assert "role instructions are in" in fake.sent[0]
     prime = Path(orch.role_dir("HarnessAgent") / "prime.md").read_text()

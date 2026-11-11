@@ -90,7 +90,7 @@ def check_directory() -> bool:
         TASKs.add_sub_task(task_entry)
         return False
     entities = os.listdir(project_dir)
-    available_entries = [".cache", ".vms", ".git", ".gitignore", "build", "crash_reports", "crashes", "dictionary", "seeds", "fuzzers", "harnesses", "coverage_guidance"]
+    available_entries = [".cache", ".campaign", ".vms", ".git", ".gitignore", "build", "campaign-3h.yaml", "campaign.log", "crash_reports", "crashes", "dictionary", "seeds", "fuzzers", "harnesses", "coverage_guidance", "run.sh"]
     for entity in entities:
         if entity not in available_entries:
             task_entry = TaskEntry("Check Output Directory Structures", Status.FAILED, f"Unknown entity detected in the $OUTPUT directory: `{entity}`. Please don't corrupt the directory structure. The available entities are: {available_entries}.")
@@ -229,7 +229,7 @@ def check_build_directory() -> bool:
         TASKs.add_sub_task(task_entry)
         return False
     entities = os.listdir(build_dir)
-    available_entries = ["basic", "fuzzer", "sanitizer", "coverage", "build.sh"]
+    available_entries = ["basic", "fuzzer", "sanitizer", "coverage", "build.sh", "logs"]
     for entity in entities:
         if entity not in available_entries:
             task_entry = TaskEntry("Check Building Artifacts", Status.FAILED, f"Unknown entity detected in the build directory: {entity}. The available entities are: {available_entries}")

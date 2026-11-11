@@ -159,10 +159,16 @@ class HC:
         data = self._invoke(args, timeout=60)
         return Terminal.from_json(data)
 
-    def send(self, name: str, text: str, if_idle: bool = True, force: bool = False) -> dict[str, Any]:
+    def send(self, name: str, text: str, if_not_working: bool = True, force: bool = False) -> dict[str, Any]:
+        if if_not_working:
+            terminal = self.get(name)
+            if terminal is None:
+                raise HCError(f"terminal {name!r} disappeared")
+            # hc --if only accepts idle or working. done is a finished turn, not a
+            # busy one, so ask hc and send whenever the terminal is not working.
+            if terminal.state_word == "working":
+                raise HCError(f"terminal {name!r} is working; not sending")
         args = ["send"]
-        if if_idle:
-            args += ["--if", "idle"]
         if force:
             args.append("--force")
         args += [name, text]

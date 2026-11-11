@@ -147,6 +147,7 @@ class Orchestrator:
                 "fuzzagent.campaign": self.campaign.name,
                 "fuzzagent.role": agent.role,
                 "fuzzagent.kind": "agent" if agent.role != self.campaign.manager_role else "manager",
+                "herdr.space": agent.role,
             },
             keep=bool(self.campaign.hc.get("keep", True)),
             outlive_parent=bool(self.campaign.hc.get("outlive_parent", True)),
@@ -217,7 +218,7 @@ class Orchestrator:
         self.journal({"event": "dispatch", "task": task_id, "role": role, "task_text": task[:400]})
 
         try:
-            sent = self.hc.send(name, message, if_idle=True)
+            sent = self.hc.send(name, message, if_not_working=True)
             if sent.get("started") is False:
                 raise HCError(f"send to {role} did not start: {sent}")
             self.write_state(role, primed=True)

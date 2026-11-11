@@ -23,13 +23,38 @@ color_command() {
 }
 
 print_usage() {
-    printf 'Usage: %s launch <source-directory-or-git-url> [--output <directory>]\n       %s resume <output-directory>\n       %s tui <container-name> [hc-tui arguments...]\n\n' "$0" "$0" "$0"
+    printf 'Usage: %s launch <source-directory-or-git-url> [options]\n       %s resume <output-directory> [options]\n       %s tui --output <directory> [hc-tui arguments...]\n       %s tui <container-name> [hc-tui arguments...]\n\n' "$0" "$0" "$0" "$0"
     cat <<'EOF'
 
-Start a fuzzing campaign for a local source directory or Git repository URL.
-The default fuzzing duration is 24h; override it with FUZZING_DURATION, e.g.:
+Options for launch and resume (values follow each option):
+  --duration DURATION       Campaign time budget (default: 24h)
+  --api-base-url URL        OpenAI-compatible endpoint (default: https://api.openai.com/v1)
+  --api-key KEY             API key (default: empty)
+  --model MODEL             Legacy runtime model (default: empty)
+  --github-token TOKEN      GitHub search token (default: empty)
+  --auth-dir DIR            Host CLI auth bundle (default: .cache/auth in repository)
+  --temperature NUMBER      LLM temperature (default: 0.6)
+  --top-p NUMBER            LLM top-p (default: 0.9)
+  --top-k NUMBER            LLM top-k (default: 20)
+  --reply-timeout SECONDS   LLM reply timeout (default: 600)
+  --max-agent-epochs COUNT  Agent epoch limit (default: 100)
+  --reminder-token-ratio N  Reminder token ratio (default: 0.8)
+  --max-token-len COUNT     Maximum token length (default: 128000)
+  --oss-access-key-id KEY   OSS access key ID (default: empty)
+  --oss-access-key-secret K OSS access key secret (default: empty)
+  --oss-endpoint URL        OSS endpoint (default: empty)
+  --oss-bucket NAME         OSS bucket (default: empty)
+  --http-proxy URL          HTTP proxy (default: empty)
+  --https-proxy URL         HTTPS proxy (default: empty)
+  --no-proxy HOSTS          Proxy exclusions (default: localhost,127.0.0.1)
+
+Options for launch only:
+  --output DIR              Output directory (default: output/<target>)
+  --engine hc|legacy        Runtime (default: hc)
+  --config PATH             Campaign config inside the container (default: config/campaign.yaml)
+  --session NAME            hc session (default: fz-<target>)
 EOF
-    printf '  %s\n  %s\n  %s\n' "$(color_command "FUZZING_DURATION=10m $0 launch ./my-library --output ./results")" "$(color_command "$0 resume ./results")" "$(color_command "$0 tui fuzzagent-my-library")"
+    printf '\n  %s\n  %s\n  %s\n' "$(color_command "$0 launch ./my-library --duration 10m --output ./results")" "$(color_command "$0 resume ./results")" "$(color_command "$0 tui --output ./results")"
 }
 
 if [[ "$ACTION" == "--help" || "$ACTION" == "-h" ]]; then
@@ -39,22 +64,80 @@ fi
 
 if [[ "$ACTION" == tui ]]; then
     if [[ $# -lt 2 ]]; then print_usage >&2; exit 2; fi
-    container="$2"
-    shift 2
-    exec docker exec -it -e "TERM=${TERM:-xterm-256color}" "$container" sh -c 'exec hc-tui --session "$HC_SESSION" "$@"' sh "$@"
+    shift
+    if [[ "$1" == --output ]]; then
+        if [[ $# -lt 2 || -z "$2" ]]; then printf 'Missing directory for --output\n' >&2; exit 2; fi
+        metadata="$2/.campaign/launcher.json"
+        if [[ ! -f "$metadata" ]]; then printf 'Output directory is missing .campaign/launcher.json: %s\n' "$2" >&2; exit 2; fi
+        if ! container="$(python3 - "$metadata" <<'PY'
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("expected an object")
+    name = data["container"]
+    if not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", name):
+        raise ValueError("invalid container name")
+    print(name)
+except (OSError, ValueError, KeyError, TypeError) as exc:
+    print(f"Invalid launcher metadata: {exc}", file=sys.stderr)
+    sys.exit(1)
+PY
+        )"; then exit 1; fi
+        shift 2
+    else
+        container="$1"
+        shift
+    fi
+    if [[ "${1:-}" == -- ]]; then shift; fi
+    if docker info >/dev/null 2>&1; then
+        docker_cmd=(docker)
+    elif sudo -n docker info >/dev/null 2>&1; then
+        docker_cmd=(sudo -n docker)
+    else
+        printf 'Docker is unavailable or access was denied.\n' >&2; exit 1
+    fi
+    exec "${docker_cmd[@]}" exec -it -e "TERM=${TERM:-xterm-256color}" "$container" sh -c 'exec hc-tui --session "$HC_SESSION" "$@"' sh "$@"
 fi
 if [[ ( "$ACTION" != launch && "$ACTION" != resume ) || $# -lt 2 ]]; then
     print_usage >&2
     exit 2
 fi
 SOURCE="$2"
-OUTPUT_ARG=""
-if [[ "$ACTION" == launch && $# -eq 4 && "$3" == --output && -n "$4" ]]; then
-    OUTPUT_ARG="$4"
-elif [[ $# -ne 2 ]]; then
-    print_usage >&2
-    exit 2
+shift 2
+OUTPUT_ARG=""; DURATION_ARG=24h; ENGINE_ARG=hc; CONFIG_ARG=config/campaign.yaml; SESSION_ARG=""
+AUTH_DIR_ARG="$ROOT_DIR/.cache/auth"; API_BASE_ARG=https://api.openai.com/v1; API_KEY_ARG=""; MODEL_ARG=""; GITHUB_ARG=""
+TEMPERATURE_ARG=0.6; TOP_P_ARG=0.9; TOP_K_ARG=20; TIMEOUT_ARG=600; EPOCHS_ARG=100; REMINDER_ARG=0.8; MAX_TOKEN_ARG=128000
+OSS_ID_ARG=""; OSS_SECRET_ARG=""; OSS_ENDPOINT_ARG=""; OSS_BUCKET_ARG=""; HTTP_PROXY_ARG=""; HTTPS_PROXY_ARG=""; NO_PROXY_ARG=localhost,127.0.0.1
+while [[ $# -gt 0 ]]; do
+    option="$1"
+    if [[ $# -lt 2 || -z "$2" ]]; then printf 'Missing value for %s\n' "$option" >&2; exit 2; fi
+    case "$option" in
+        --output|--engine|--config|--session)
+            if [[ "$ACTION" != launch ]]; then printf '%s is only valid for launch\n' "$option" >&2; exit 2; fi
+            case "$option" in
+                --output) OUTPUT_ARG="$2" ;; --engine) ENGINE_ARG="$2" ;;
+                --config) CONFIG_ARG="$2" ;; --session) SESSION_ARG="$2" ;;
+            esac ;;
+        --duration) DURATION_ARG="$2" ;; --api-base-url) API_BASE_ARG="$2" ;;
+        --api-key) API_KEY_ARG="$2" ;; --model) MODEL_ARG="$2" ;;
+        --github-token) GITHUB_ARG="$2" ;; --auth-dir) AUTH_DIR_ARG="$2" ;;
+        --temperature) TEMPERATURE_ARG="$2" ;; --top-p) TOP_P_ARG="$2" ;;
+        --top-k) TOP_K_ARG="$2" ;; --reply-timeout) TIMEOUT_ARG="$2" ;;
+        --max-agent-epochs) EPOCHS_ARG="$2" ;; --reminder-token-ratio) REMINDER_ARG="$2" ;;
+        --max-token-len) MAX_TOKEN_ARG="$2" ;; --oss-access-key-id) OSS_ID_ARG="$2" ;;
+        --oss-access-key-secret) OSS_SECRET_ARG="$2" ;; --oss-endpoint) OSS_ENDPOINT_ARG="$2" ;;
+        --oss-bucket) OSS_BUCKET_ARG="$2" ;; --http-proxy) HTTP_PROXY_ARG="$2" ;;
+        --https-proxy) HTTPS_PROXY_ARG="$2" ;; --no-proxy) NO_PROXY_ARG="$2" ;;
+        *) printf 'Unknown option: %s\n' "$option" >&2; exit 2 ;;
+    esac
+    shift 2
+done
+if [[ "$ENGINE_ARG" != hc && "$ENGINE_ARG" != legacy ]]; then
+    printf 'Invalid engine: %s (expected hc or legacy)\n' "$ENGINE_ARG" >&2; exit 2
 fi
+export http_proxy="$HTTP_PROXY_ARG" HTTP_PROXY="$HTTP_PROXY_ARG" https_proxy="$HTTPS_PROXY_ARG" HTTPS_PROXY="$HTTPS_PROXY_ARG" no_proxy="$NO_PROXY_ARG" NO_PROXY="$NO_PROXY_ARG"
 
 if [[ "$ACTION" == launch ]]; then
     if [[ -d "$SOURCE" ]]; then
@@ -90,9 +173,13 @@ for key in ('target', 'source', 'engine', 'config', 'session'):
     if not isinstance(value, str) or not value or '\n' in value:
         raise ValueError(f'invalid {key} in launcher metadata')
     print(value)
+container = data['container']
+if not isinstance(container, str) or not container or '\n' in container:
+    raise ValueError('invalid container in launcher metadata')
+print(container)
 PY
     )
-    if [[ ${#saved[@]} -ne 5 ]]; then
+    if [[ ${#saved[@]} -ne 6 ]]; then
         printf 'Invalid campaign launcher metadata in %s\n' "$RAW_OUTPUT_DIR" >&2
         exit 1
     fi
@@ -126,26 +213,8 @@ if ! docker image inspect fuzzagent >/dev/null 2>&1; then
     exit 1
 fi
 
-ENV_FILE="$ROOT_DIR/.env"
-if [[ ! -f "$ENV_FILE" ]]; then
-    printf 'Missing %s. Create it from %s and configure the LLM endpoint:\n' \
-        "$(color_path "$ENV_FILE")" "$(color_path "$ROOT_DIR/.env_template")" >&2
-    printf '  %scp %s%s %s\n' "$RED" "$(color_path "$ROOT_DIR/.env_template")" "$RED" "$(color_path "$ENV_FILE")" >&2
-    exit 1
-fi
-
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-missing_config=()
-for name in OPENAI_BASE_URL OPENAI_API_KEY OPENAI_MODEL; do
-    if [[ -z "${!name:-}" ]]; then
-        missing_config+=("$name")
-    fi
-done
-if (( ${#missing_config[@]} > 0 )); then
-    printf 'Configure the following required values in %s: %s\n' "$(color_path "$ENV_FILE")" "${missing_config[*]}" >&2
+if [[ "$ACTION" == launch && "$ENGINE_ARG" == legacy && ( -z "$API_KEY_ARG" || -z "$MODEL_ARG" ) ]]; then
+    printf 'The legacy engine requires --api-key and --model.\n' >&2
     exit 1
 fi
 
@@ -204,8 +273,12 @@ if [[ "$ACTION" == launch ]]; then
     mkdir -p "$RAW_OUTPUT_DIR/.campaign"
 fi
 
-export CONTAINER_NAME="fuzzagent-$TARGET"
-export FUZZING_DURATION="${FUZZING_DURATION:-24h}"
+if [[ "$ACTION" == resume ]]; then
+    export CONTAINER_NAME="${saved[5]}"
+else
+    export CONTAINER_NAME="fuzzagent-$TARGET"
+fi
+export FUZZING_DURATION="$DURATION_ARG"
 export COMMAND='bash /root/FuzzAgent/benchmark/run_benchmark.sh'
 export WRITE_MODE=rw
 export FUZZING_ENGINE=afl++
@@ -214,17 +287,23 @@ export FUZZAGENT_DIR="$ROOT_DIR"
 export SRC_DIR="$TARGET_DIR"
 export REPO_BASE_NAME="$TARGET"
 export RAW_OUTPUT_DIR
+export FUZZAGENT_AUTH_DIR="$(realpath -m -- "$AUTH_DIR_ARG")" HOST_AUTH_DIR=/run/fuzzagent-auth
+export OPENAI_BASE_URL="$API_BASE_ARG" OPENAI_API_KEY="$API_KEY_ARG" OPENAI_MODEL="$MODEL_ARG" GITHUB_TOKEN="$GITHUB_ARG"
+export LLM_TEMPERATURE="$TEMPERATURE_ARG" LLM_TOP_P="$TOP_P_ARG" LLM_TOP_K="$TOP_K_ARG" LLM_REPLY_TIMEOUT="$TIMEOUT_ARG"
+export MAX_AGENT_EPOCHS="$EPOCHS_ARG" REMINDER_TOKEN_RATIO="$REMINDER_ARG" MAX_TOKEN_LEN="$MAX_TOKEN_ARG"
+export OSS_ACCESS_KEY_ID="$OSS_ID_ARG" OSS_ACCESS_KEY_SECRET="$OSS_SECRET_ARG" OSS_ENDPOINT="$OSS_ENDPOINT_ARG" OSS_BUCKET="$OSS_BUCKET_ARG"
+export http_proxy="$HTTP_PROXY_ARG" HTTP_PROXY="$HTTP_PROXY_ARG" https_proxy="$HTTPS_PROXY_ARG" HTTPS_PROXY="$HTTPS_PROXY_ARG" no_proxy="$NO_PROXY_ARG" NO_PROXY="$NO_PROXY_ARG"
 if [[ "$ACTION" == resume ]]; then
     export FUZZAGENT_ENGINE="${saved[2]}" FUZZAGENT_CONFIG="${saved[3]}" HC_SESSION="${saved[4]}"
 else
-    export FUZZAGENT_ENGINE="${FUZZAGENT_ENGINE:-hc}" FUZZAGENT_CONFIG="${FUZZAGENT_CONFIG:-config/campaign.yaml}" HC_SESSION="${HC_SESSION:-fz-$TARGET}"
+    export FUZZAGENT_ENGINE="$ENGINE_ARG" FUZZAGENT_CONFIG="$CONFIG_ARG" HC_SESSION="${SESSION_ARG:-fz-$TARGET}"
     if [[ "$FUZZAGENT_ENGINE" == legacy ]]; then
         export FUZZAGENT_AUTO_CLEAN=1
     fi
-    python3 - "$RAW_OUTPUT_DIR/.campaign/launcher.json" "$TARGET" "$TARGET_DIR" "$FUZZAGENT_ENGINE" "$FUZZAGENT_CONFIG" "$HC_SESSION" <<'PY'
+    python3 - "$RAW_OUTPUT_DIR/.campaign/launcher.json" "$TARGET" "$TARGET_DIR" "$FUZZAGENT_ENGINE" "$FUZZAGENT_CONFIG" "$HC_SESSION" "$CONTAINER_NAME" <<'PY'
 import json, sys
 with open(sys.argv[1], 'w', encoding='utf-8') as f:
-    json.dump(dict(zip(('target', 'source', 'engine', 'config', 'session'), sys.argv[2:])), f, indent=2)
+    json.dump(dict(zip(('target', 'source', 'engine', 'config', 'session', 'container'), sys.argv[2:])), f, indent=2)
 PY
 fi
 export FUZZAGENT_RESUME="$([[ "$ACTION" == resume ]] && printf 1 || printf 0)"
@@ -236,7 +315,7 @@ printf '  Source:   %s\n' "$(color_path "$TARGET_DIR")"
 printf '  Results:  %s\n' "$(color_path "$RAW_OUTPUT_DIR")"
 printf '  Container: %s\n\n' "$CONTAINER_NAME"
 
-if ! docker compose -p "$CONTAINER_NAME" -f "$ROOT_DIR/docker_template.yml" up -d; then
+if ! docker compose --env-file /dev/null -p "$CONTAINER_NAME" -f "$ROOT_DIR/docker_template.yml" up -d; then
     printf '\nCould not start the benchmark container. Check the Docker output above.\n' >&2
     exit 1
 fi
@@ -260,5 +339,5 @@ Stop the benchmark early:
 
 
 Attach the terminal UI:
-  $(color_command "$0 tui $CONTAINER_NAME")
+  $(color_command "$0 tui --output '$RAW_OUTPUT_DIR'")
 EOF
