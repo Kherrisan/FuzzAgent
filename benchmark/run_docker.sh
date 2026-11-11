@@ -201,6 +201,8 @@ HOST_OUTPUT="${HOST_ROOT}/output/${TARGET}"
 mkdir -p "$ROOT_DIR/output/$TARGET"
 
 export CONTAINER_NAME="fuzzagent-$TARGET"
+# Every hc call and attach inside the container must target this session.
+export HC_SESSION="${HC_SESSION:-fz-$TARGET}"
 export FUZZING_DURATION="${FUZZING_DURATION:-24h}"
 export FUZZING_ENGINE=afl++
 export FUZZAGENT_AUTO_CLEAN=1
@@ -228,6 +230,7 @@ if ! "${DOCKER[@]}" run -d --name "$CONTAINER_NAME" --init \
     -v "${HOST_SRC}:/src/${TARGET}" \
     --env-file "$ENV_FILE" \
     -e FUZZAGENT_AUTO_CLEAN=1 \
+    -e "HC_SESSION=${HC_SESSION}" \
     -e "SRC=/root/src/${TARGET}" \
     -e "OUTPUT=/root/FuzzAgent/output/${TARGET}" \
     -e AFL_SKIP_CPUFREQ=1 \
