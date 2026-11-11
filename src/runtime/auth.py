@@ -4,7 +4,8 @@ Each coding-agent CLI stores its credentials differently (codex
 ``.codex/auth.json``, grok ``.grok/auth.json``, pi ``.pi/agent/...``, dsh session
 files).  The campaign does not want those files baked into the image, so a TOML
 file lists them per role and ``campaignctl prepare`` copies them into that
-role's isolated HOME with mode 0600.
+role's isolated HOME with mode 0600. Existing files are retained so refreshed
+credentials survive campaign restarts.
 
 Format::
 
@@ -72,11 +73,17 @@ def load_auth_spec(path: str | Path | None) -> dict[str, list[AuthFile]]:
 
 
 def materialize(role: str, home: Path, spec: dict[str, list[AuthFile]]) -> AuthReport:
-    """Copy the role's auth files into ``home`` with restrictive modes."""
+    """Seed missing auth files in ``home`` with restrictive modes."""
     report = AuthReport()
     for entry in spec.get(role, []):
         source = Path(entry.source)
         dest = home / entry.dest
+        if dest.is_file():
+            try:
+                os.chmod(dest, 0o600)
+            except OSError:
+                pass
+            continue
         if not source.is_file():
             report.missing.append(entry)
             continue

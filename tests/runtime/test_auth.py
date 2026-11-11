@@ -44,6 +44,23 @@ def test_missing_source_is_reported_not_fatal(tmp_path: Path):
     assert report.missing[0].source == "/nope/auth.json"
 
 
+def test_existing_role_credentials_survive_repeated_preparation(tmp_path: Path):
+    source = tmp_path / "auth.json"
+    source.write_text("original")
+    spec = {"ManagerAgent": [auth.AuthFile("ManagerAgent", ".codex/auth.json", str(source))]}
+    home = tmp_path / "home"
+    auth.materialize("ManagerAgent", home, spec)
+    dest = home / ".codex/auth.json"
+    dest.write_text("refreshed")
+    source.unlink()
+
+    report = auth.materialize("ManagerAgent", home, spec)
+
+    assert dest.read_text() == "refreshed"
+    assert stat.S_IMODE(dest.stat().st_mode) == 0o600
+    assert not report.missing
+
+
 def test_unknown_role_is_ignored(tmp_path: Path):
     toml = tmp_path / "agent_auth.toml"
     toml.write_text('[OtherRole.files]\n"x" = "/nope"\n', encoding="utf-8")

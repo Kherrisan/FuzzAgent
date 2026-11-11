@@ -18,10 +18,12 @@ services:
       - NET_ADMIN
     environment:
       - FUZZAGENT_AUTO_CLEAN=${FUZZAGENT_AUTO_CLEAN:-0}
+      - FUZZAGENT_RESUME=${FUZZAGENT_RESUME:-0}
       - HC_SESSION=${HC_SESSION:-fz-${REPO_BASE_NAME}}
       - FUZZAGENT_ENGINE=${FUZZAGENT_ENGINE:-hc}
       - FUZZAGENT_CONFIG=${FUZZAGENT_CONFIG:-config/campaign.yaml}
       - HOST_AUTH_DIR=${HOST_AUTH_DIR:-/run/fuzzagent-auth}
+      - REPO_BASE_NAME=${REPO_BASE_NAME}
       - SRC=/root/src/${REPO_BASE_NAME}
       - OUTPUT=/root/FuzzAgent/output/${REPO_BASE_NAME}
       - AFL_SKIP_CPUFREQ=1

@@ -173,7 +173,9 @@ class CampaignController:
         problems.extend(guards.verify_artifacts(self.paths))
         for role, entries in self.orchestrator.auth_spec.items():
             for entry in entries:
-                if not Path(entry.source).is_file():
+                agent = self.agents.get(role)
+                dest = Path(agent.home) / entry.dest if agent else None
+                if not Path(entry.source).is_file() and not (dest and dest.is_file()):
                     problems.append(f"{role}: auth source missing: {entry.source}")
         return {"problems": problems, "binaries": binaries, "hc": hc_version}
 

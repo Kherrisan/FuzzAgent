@@ -75,18 +75,36 @@ A GitHub token is optional. Create one at [github.com/settings/tokens](https://g
 ### 3. Launch a benchmark
 
 ```bash
-./benchmark/run.sh cjson
+./benchmark/run.sh launch https://github.com/DaveGamble/cJSON.git
 ```
 
-The launcher prepares the source checkout and starts `fuzzagent-cjson` in the background. The default campaign runs for **24 hours**, then exports full code coverage. Source and output paths are configured automatically.
+The launcher clones the repository and starts `fuzzagent-cjson` in the background. You can also pass a local source directory, for example `./benchmark/run.sh launch /path/to/cJSON`. The default campaign runs for **24 hours**; set `FUZZING_DURATION=10m` for a shorter run. Source and output paths are configured automatically.
+
+By default, results go to `output/<target>`. To choose a different directory, pass `--output`:
+
+```bash
+./benchmark/run.sh launch /path/to/cJSON --output /path/to/results
+./benchmark/run.sh resume /path/to/results
+```
+
+For hc campaigns started by this launcher, resume from the output directory or open the running campaign's terminal UI:
+
+```bash
+./benchmark/run.sh resume output/cjson
+./benchmark/run.sh tui fuzzagent-cjson
+```
+
+Resume starts a new duration budget and requires the launcher's saved metadata and working source under the output directory. It preserves campaign artifacts and agent sessions. A new launch refuses to use a nonempty output directory.
+
+Each hc agent uses its own persistent home at `<output>/.campaign/agents/<role>/home`, including its `.codex`, `.grok`, or other CLI directory. Credentials are initially copied from the configured auth bundle; existing credentials are preserved on restart. To replace credentials, update the relevant file in the role's home or remove it so the next preparation copies it from the bundle.
 
 ## Benchmarks
 
-Choose a library below and use its **Target ID** with `./benchmark/run.sh <target>`. Library names link to their source repositories.
+Choose a library below and pass its repository URL to `./benchmark/run.sh launch`. Library names link to their source repositories.
 
-The launcher caches checkouts in `.cache/targets/<target>` and saves results in `output/<target>`. It currently clones each repository's default branch; the paper's evaluation uses the specific revisions listed in Table I.
+For URLs, the launcher caches checkouts in `.cache/targets/<target>` and clones the default branch. For local paths, it uses the supplied directory. It derives `<target>` from the directory or repository name. The paper's evaluation uses the specific revisions listed in Table I; to select a revision, pass a local checkout or check out that revision in the cached repository before starting.
 
-| Library | Focus | Target ID |
+| Library | Focus | Paper target ID |
 | :--- | :--- | :--- |
 | [c-ares](https://github.com/c-ares/c-ares) | Asynchronous DNS resolution | `c-ares` |
 | [cJSON](https://github.com/DaveGamble/cJSON) | JSON parsing and serialization | `cjson` |

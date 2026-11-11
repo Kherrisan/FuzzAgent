@@ -1,0 +1,46 @@
+#!/bin/sh
+# Open hc-tui on the hc session this container is already serving.
+# Extra arguments are passed through, so `hc-tui-attach --version` works.
+set -eu
+
+for arg in "$@"; do
+    if [ "$arg" = "--session" ]; then
+        exec hc-tui "$@"
+    fi
+done
+
+session=${HC_SESSION:-}
+
+if [ -z "$session" ]; then
+    state_roots="/root/.local/state/herdr-core"
+    if [ -n "${HOME:-}" ] && [ "$HOME" != /root ]; then
+        state_roots="$HOME/.local/state/herdr-core $state_roots"
+    fi
+    found=""
+    count=0
+    for root in $state_roots; do
+        [ -d "$root" ] || continue
+        for dir in "$root"/*; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            case " $found " in
+                *" $name "*) continue ;;
+            esac
+            found="$found $name"
+            count=$((count + 1))
+            session=$name
+        done
+    done
+    if [ "$count" -eq 0 ]; then
+        echo "hc-tui-attach: no herdr session found." >&2
+        echo "Start a campaign, or run: hc-tui --session <name>" >&2
+        exit 1
+    fi
+    if [ "$count" -gt 1 ]; then
+        echo "hc-tui-attach: multiple sessions:$found" >&2
+        echo "Pick one with: hc-tui --session <name>" >&2
+        exit 1
+    fi
+fi
+
+exec hc-tui --session "$session" "$@"

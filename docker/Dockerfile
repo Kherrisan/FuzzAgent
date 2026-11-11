@@ -192,9 +192,21 @@ RUN set -eux; \
     rm -rf /tmp/docker; \
     hc --version
 
+# hc-tui: terminal UI for the hc session already running in this image.
+# The core is installed above, so skip the installer's own hc download.
+# Keep this pin in sync with HC_TUI_VERSION in bin/hc-tui.sh.
+ARG HC_TUI_VERSION=0.1.2
+RUN curl -fsSL https://followcat.github.io/hc-tui/install.sh \
+        | HC_TUI_VERSION="${HC_TUI_VERSION}" \
+          HC_TUI_INSTALL_DIR=/usr/local/bin \
+          HC_TUI_SKIP_CORE=1 \
+          sh \
+    && hc-tui --version
+
 # The MCP server every agent CLI spawns; the controller entrypoint.
-COPY bin/fuzzagent-mcp bin/campaignctl /usr/local/bin/
-RUN chmod +x /usr/local/bin/fuzzagent-mcp /usr/local/bin/campaignctl
+# hc-tui-attach opens the TUI on the container's existing hc session.
+COPY bin/fuzzagent-mcp bin/campaignctl bin/hc-tui-attach /usr/local/bin/
+RUN chmod +x /usr/local/bin/fuzzagent-mcp /usr/local/bin/campaignctl /usr/local/bin/hc-tui-attach
 
 # --- project Python environment (source stays mounted, deps are baked) ------
 # `uv run` at runtime must not need the network: pin the project environment

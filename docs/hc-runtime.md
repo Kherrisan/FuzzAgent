@@ -99,7 +99,11 @@ them into that role's isolated `HOME` with mode `0600`:
 - `bin/collect-auth` copies the local CLI credentials (`~/.codex/auth.json`,
   `~/.grok/auth.json`, `~/.pi/agent/auth.json`, `~/.dsh/auth.json`) into
   `./.cache/auth`, which compose mounts read-only at `/run/fuzzagent-auth`.
-- Missing sources are skipped and reported by `campaignctl doctor`
+- Existing role credentials are preserved on restart, including tokens refreshed
+  by the CLI. To replace one from the auth bundle, remove the corresponding file
+  in the role home before preparing the campaign again.
+- Missing sources are skipped and reported by `campaignctl doctor` when the role
+  has no existing credential file
   (`<role>: auth source missing: ...`); contents are never printed or
   journalled.
 - Role homes are added to `$OUTPUT/.gitignore` (`.campaign/agents/*/home/`) so
