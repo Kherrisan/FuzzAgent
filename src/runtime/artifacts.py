@@ -150,8 +150,3 @@ def observe_current_states(paths: ProjectPaths, timeout: int = 120) -> str:
     return (proc.stdout or "") + (proc.stderr or "")
 
 
-def snapshot(output: Path, message: str) -> tuple[int, str]:
-    """Commit the campaign tree with the legacy VMS helper (git based)."""
-    from src.utils.vms import VMS
-
-    return VMS(str(output)).create_snapshot(message)

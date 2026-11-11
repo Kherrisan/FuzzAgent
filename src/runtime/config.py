@@ -2,7 +2,7 @@
 
 One ``campaign.yaml`` describes the campaign; one ``agents/<Role>.yaml`` per
 role describes that agent independently (driver, model, prompt, tools, MCP,
-session policy, timeouts, snapshots).
+session policy and timeouts).
 
 Everything is plain dataclasses so the runtime can be imported without pulling
 in the legacy pydantic/OpenAI stack.
@@ -95,12 +95,6 @@ class DispatchSpec:
 
 
 @dataclass
-class SnapshotSpec:
-    on: str = "done"
-    mode: str = "artifacts"
-
-
-@dataclass
 class AgentConfig:
     role: str
     driver: str
@@ -127,7 +121,6 @@ class AgentConfig:
     mcp: McpSpec = field(default_factory=McpSpec)
     session: SessionSpec = field(default_factory=SessionSpec)
     dispatch: DispatchSpec = field(default_factory=DispatchSpec)
-    snapshot: SnapshotSpec = field(default_factory=SnapshotSpec)
     status: str = "native"
     terminal_name: str | None = None
     card: str | None = None
@@ -167,7 +160,6 @@ class CampaignConfig:
     max_rounds: int = 0
     round_prompt_file: str | None = None
     base_dir: str | None = None
-    snapshot_enabled: bool = True
     auth_config: str | None = "config/agent_auth.toml"
 
     @property
@@ -196,7 +188,6 @@ def _agent_from_dict(data: dict[str, Any], source_path: str | None = None) -> Ag
             "mcp",
             "session",
             "dispatch",
-            "snapshot",
             "agent",
         }
     }
@@ -230,13 +221,6 @@ def _agent_from_dict(data: dict[str, Any], source_path: str | None = None) -> Ag
                 k: v
                 for k, v in (data.get("dispatch") or {}).items()
                 if k in DispatchSpec.__dataclass_fields__
-            }
-        ),
-        snapshot=SnapshotSpec(
-            **{
-                k: v
-                for k, v in (data.get("snapshot") or {}).items()
-                if k in SnapshotSpec.__dataclass_fields__
             }
         ),
         source_path=source_path,
@@ -277,8 +261,6 @@ def load_campaign(path: str | Path) -> CampaignConfig:
     data = _expand(data, context)
     known = {f for f in CampaignConfig.__dataclass_fields__}
     payload = {k: v for k, v in data.items() if k in known}
-    snapshot_block = data.get("snapshot") or {}
-    payload["snapshot_enabled"] = bool(snapshot_block.get("enabled", True))
     campaign = CampaignConfig(**payload)
     if campaign.base_dir is None:
         campaign.base_dir = str(path.parent.parent)
@@ -318,6 +300,5 @@ def render_agent(agent: AgentConfig, campaign: CampaignConfig) -> AgentConfig:
         "mcp": agent.mcp,
         "session": agent.session,
         "dispatch": agent.dispatch,
-        "snapshot": agent.snapshot,
     }
     return AgentConfig(**payload)

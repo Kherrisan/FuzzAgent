@@ -77,7 +77,7 @@ def campaign(tmp_path: Path) -> CampaignConfig:
     src.mkdir(parents=True)
     return CampaignConfig(
         name="cjson", target="cjson", src=str(src), output=str(out), session="fz-cjson",
-        snapshot_enabled=False, base_dir=str(REPO),
+        base_dir=str(REPO),
     )
 
 

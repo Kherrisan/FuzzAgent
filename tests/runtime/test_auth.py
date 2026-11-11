@@ -93,18 +93,15 @@ def controller(tmp_path: Path) -> CampaignController:
         session="fz-cjson",
         agents_dir=str(Path(__file__).resolve().parents[2] / "config" / "agents"),
         auth_config=str(toml),
-        snapshot_enabled=False,
     )
     return CampaignController(campaign, hc=FakeHC())
 
 
-def test_prepare_copies_auth_into_role_home_and_ignores_snapshots(controller):
+def test_prepare_copies_auth_into_role_home(controller):
     controller.prepare()
     home = Path(controller.campaign.output) / ".campaign" / "agents" / "ManagerAgent" / "home"
     assert (home / ".codex" / "auth.json").exists()
 
-    gitignore = (Path(controller.campaign.output) / ".gitignore").read_text()
-    assert ".campaign/agents/*/home/" in gitignore
 
     journal = (Path(controller.campaign.output) / ".campaign" / "journal.jsonl").read_text()
     events = [json.loads(line) for line in journal.splitlines()]

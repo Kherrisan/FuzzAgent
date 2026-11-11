@@ -32,8 +32,6 @@ hc:
   keep: true
   outlive_parent: true
 
-snapshot:
-  enabled: true
 
 resume:
   mode: auto

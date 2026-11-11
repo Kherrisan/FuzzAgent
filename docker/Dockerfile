@@ -219,9 +219,5 @@ ENV PATH="/opt/fuzzagent-build/.venv/bin:${PATH}"
 # We Must mapping our source code to this path in the container (DEV Phase)
 WORKDIR /root/FuzzAgent
 
-# Agent snapshots commit the output tree. Without an identity, git commit
-# fails and the process dies on `git rev-parse HEAD`.
-RUN git config --global user.name "fuzzagent" && \
-    git config --global user.email "fuzzagent@localhost"
 
 #ENTRYPOINT ["python", "main.py"]

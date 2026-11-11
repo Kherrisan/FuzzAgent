@@ -275,7 +275,6 @@ def load_campaign_record(paths: artifacts.ProjectPaths):
         session=data["session"],
         agents_dir=data["agents_dir"],
         base_dir=data.get("base_dir"),
-        snapshot_enabled=bool(data.get("snapshot_enabled", False)),
     )
 
 

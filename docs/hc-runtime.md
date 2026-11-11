@@ -34,7 +34,7 @@ src/runtime/executor.py        one subprocess per tool call, full log on disk
 src/runtime/guards.py          legacy pre/exit/post hooks (shared with legacy)
 src/runtime/hc.py              typed wrapper over the hc CLI
 src/runtime/drivers.py         per-CLI launch/MCP/resume adapters
-src/runtime/orchestrator.py    dispatch: task -> hc send/wait -> report -> snapshot
+src/runtime/orchestrator.py    dispatch: task -> hc send/wait -> report
 src/runtime/campaign.py        campaignctl controller (rounds, budget, doctor)
 src/runtime/mcp/server.py      stdio MCP server, one process per agent turn
 bin/fuzzagent-mcp              MCP entrypoint (used by every CLI config)
@@ -46,7 +46,7 @@ $OUTPUT/.campaign/             state, task journal, transcripts, role homes
 
 Each `config/agents/<Role>.yaml` is independent: driver, launch argv, model,
 env, isolated `HOME` (so CLI sessions/configs never mix), prompt source, tool
-allowlist, session policy, timeouts, snapshot policy and status mode. Paths are
+allowlist, session policy, timeouts and status mode. Paths are
 expanded from `SRC`/`OUTPUT` when the campaign starts.
 
 The tool allowlists are the legacy ones, so the prompts keep working; the MCP
@@ -67,7 +67,6 @@ Built into `fuzzagent` by `docker/Dockerfile`:
 | `hc` (herdr-core) 0.1.18 | official installer (`releases.herdr.dev`), or a local `docker/herdr-core` override |
 | `pi` 1.5.2 | npm `@earendil-works/pi-coding-agent` (pinned) |
 | project Python deps | `uv sync --frozen` into `/opt/fuzzagent-build/.venv`, baked (`UV_PROJECT_ENVIRONMENT`, `UV_NO_SYNC=1`) |
-| git identity for VMS snapshots | `git config --global` |
 
 Still **outside** the image (by design or not yet done):
 
@@ -107,7 +106,6 @@ them into that role's isolated `HOME` with mode `0600`:
   (`<role>: auth source missing: ...`); contents are never printed or
   journalled.
 - Role homes are added to `$OUTPUT/.gitignore` (`.campaign/agents/*/home/`) so
-  VMS snapshots never commit credentials or session stores.
 
 ## Grok-only profile
 
@@ -143,7 +141,6 @@ campaignctl --config config/campaign.yaml up --resume
 campaignctl --config config/campaign.yaml status
 campaignctl --config config/campaign.yaml doctor
 campaignctl --config config/campaign.yaml resume-brief
-campaignctl --config config/campaign.yaml rollback --to last-good
 ```
 
 `doctor` checks: launcher binaries, `hc --version`, contiguous harness/fuzzer
@@ -160,7 +157,7 @@ ids, guidance count vs harness count, crash report completeness.
    inventory, interrupted tasks, recent journal entries).
 
 `$OUTPUT/.campaign/journal.jsonl` is the append-only record of dispatch/finish/
-snapshot/interrupt/rollback; `tasks/<id>/{task.md,tools.jsonl,report.md,meta.json}`
+interrupt/rollback; `tasks/<id>/{task.md,tools.jsonl,report.md,meta.json}`
 keeps everything a guard or a human needs after a crash.
 
 ## Verification

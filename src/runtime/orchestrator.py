@@ -2,7 +2,7 @@
 
 This is the piece that replaces ``ManagerAgent.handle_agent_action``: it writes
 the task, wakes the target agent through hc, waits for the turn to end, reads
-the report the agent submitted through the ``finish_task`` tool, snapshots the tree and
+the report the agent submitted through the ``finish_task`` tool and
 returns the same ``report + observe_current_states`` string the legacy manager
 saw.
 """
@@ -34,7 +34,6 @@ class TaskRecord:
     status: str = "running"
     report: str = ""
     terminal: str = ""
-    snapshot: str | None = None
 
 
 class Orchestrator:
@@ -96,23 +95,8 @@ class Orchestrator:
         report = auth.materialize(agent.role, home, self.auth_spec)
         if report.copied or report.missing:
             self.journal({"event": "auth_materialized", **report.as_dict()})
-        self._ensure_snapshot_ignores()
         return home, cwd
 
-    def _ensure_snapshot_ignores(self) -> None:
-        """Never commit per-role credential/session stores into VMS snapshots."""
-        gitignore = Path(self.campaign.output) / ".gitignore"
-        entries = [".campaign/agents/*/home/", ".campaign/agents/*/auth/"]
-        try:
-            existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
-            missing = [entry for entry in entries if entry not in existing.splitlines()]
-            if missing:
-                with gitignore.open("a", encoding="utf-8") as handle:
-                    if existing and not existing.endswith("\n"):
-                        handle.write("\n")
-                    handle.write("\n".join(missing) + "\n")
-        except OSError:
-            pass
 
     def ensure_terminal(self, agent: AgentConfig) -> Terminal:
         name = self.terminal_name(agent)
@@ -297,14 +281,6 @@ class Orchestrator:
             "terminal": record.terminal,
         }
         (directory / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-        if status == "done" and self.campaign.snapshot_enabled:
-            try:
-                _, commit = artifacts.snapshot(Path(self.campaign.output), f"{record.role} {record.task_id}")
-                record.snapshot = commit
-                meta["snapshot"] = commit
-                (directory / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-            except Exception as exc:  # pragma: no cover - git identity/missing repo
-                self.journal({"event": "snapshot_failed", "task": record.task_id, "error": str(exc)})
         self.journal(
             {
                 "event": "finished",
@@ -312,7 +288,6 @@ class Orchestrator:
                 "role": record.role,
                 "status": status,
                 "report": record.report[:400],
-                "snapshot": record.snapshot,
             }
         )
 

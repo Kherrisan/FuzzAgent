@@ -32,8 +32,6 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("doctor", help="check binaries, hc and artifact consistency")
     sub.add_parser("resume-brief", help="print the resume brief")
 
-    rollback = sub.add_parser("rollback", help="restore a VMS snapshot")
-    rollback.add_argument("--to", default="last-good")
 
     args = parser.parse_args(argv)
     controller = CampaignController(load(args.config))
@@ -53,9 +51,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if report["problems"] else 0
     if args.command == "resume-brief":
         print(controller.orchestrator.resume_brief())
-        return 0
-    if args.command == "rollback":
-        print(controller.rollback(args.to))
         return 0
     return 2
 

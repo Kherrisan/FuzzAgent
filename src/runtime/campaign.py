@@ -64,7 +64,6 @@ class CampaignController:
             "duration_hours": self.campaign.duration_hours,
             "agents_dir": str(Path(self.campaign.agents_dir).resolve()),
             "base_dir": self.campaign.base_dir,
-            "snapshot_enabled": self.campaign.snapshot_enabled,
             "started": time.time(),
         }
         (self.orchestrator.campaign_dir / "campaign.json").write_text(
@@ -179,23 +178,3 @@ class CampaignController:
                     problems.append(f"{role}: auth source missing: {entry.source}")
         return {"problems": problems, "binaries": binaries, "hc": hc_version}
 
-    def rollback(self, target: str) -> str:
-        from src.utils.vms import VMS
-
-        vms = VMS(self.campaign.output)
-        if target in {"last-good", "last"}:
-            snapshots = vms.list_snapshots()
-            if not snapshots:
-                raise RuntimeError("no snapshots recorded")
-            target_id = snapshots[-1]["id"]
-        else:
-            target_id = int(target)
-        for terminal in self.hc.find_by_label(campaign=self.campaign.name):
-            self.hc.kill(terminal.name or terminal.address)
-        result = vms.restore_snapshot(target_id)
-        self.orchestrator.journal({"event": "rollback", "snapshot": target_id})
-        return str(result)
-
-
-def load(path: str) -> CampaignConfig:
-    return load_campaign(path)

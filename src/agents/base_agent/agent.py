@@ -10,7 +10,6 @@ from src.memory.history_processor import HistoryProcessor
 from src.utils.llm import query_llm
 from src.utils.aci import ACI, InvalidResponseFormatError
 from src.utils.log import get_logger
-from src.utils.project import PROJECT_VMS
 from src.utils.llm import ToolCall, TokenLenExceed, TokenLenWillExceed
 from src.tools.APIToolCall import API_TOOL_CALLS
 from src.planning.prompt import NEXT_ACTION_PLANNING_PROMPT, RESPONSE_FORMAT_PROMPT, FRIST_ACTION_PLANNING_PROMPT
@@ -192,7 +191,5 @@ class BaseAgent(ABC):
             self.exit_reason = "The agent has reached the maximum number of epochs. End of the agent execution."
         # Generate and save summary after execution ends
         #self.summarizer.generate_and_save_summary(agent_name=self.get_agent_name(), original_input=input_msg, exit_reason=self.exit_reason, conversation_history=self.history_processor.get_messages())
-        id, hash = PROJECT_VMS.create_snapshot(self.get_agent_name())
-        self.logger.info(msg=f"Snapshot created: {id} {hash}")
         return self.exit_reason
     

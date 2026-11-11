@@ -2,7 +2,6 @@ import os, sys
 from pathlib import Path
 import shutil
 import subprocess
-from src.utils.vms import VMS
 import pydantic
 from enum import Enum
 import json
@@ -40,7 +39,6 @@ _src_dir = os.path.join(_fuzz_src_dir, os.path.basename(get_fuzz_library_src()))
 os.environ["SRC"] = _src_dir
 _project_output_dir = os.path.join(_output_dir, os.path.basename(get_fuzz_library_src()))
 
-PROJECT_VMS = VMS(_project_output_dir)
 
 
 def is_autoclean_enabled():
@@ -180,12 +178,6 @@ def init_environment():
     print("[+] Working directories initialized.")
     copy_fuzzer_wrapper_to_cache()
     
-    if delete:
-        print("[+] Deleting existing VMS...")
-        PROJECT_VMS.delete_vms()
-        print("[+] VMS deleted.\n[+] Initializing new VMS...")
-        PROJECT_VMS.init_vms()
-        print("[+] New VMS initialized.")
     print("[+] Environment initialization completed.")
 
 

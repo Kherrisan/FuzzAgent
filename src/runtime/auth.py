@@ -98,5 +98,5 @@ def materialize(role: str, home: Path, spec: dict[str, list[AuthFile]]) -> AuthR
 
 
 def all_destinations(spec: dict[str, list[AuthFile]]) -> list[str]:
-    """Destinations, useful for the snapshot ignore rules."""
+    """Destinations per role, useful for diagnostics."""
     return sorted({entry.dest for entries in spec.values() for entry in entries})

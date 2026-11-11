@@ -27,7 +27,6 @@ def controller(tmp_path: Path) -> CampaignController:
         output=str(out),
         session="fz-cjson",
         agents_dir=str(REPO / "config" / "agents"),
-        snapshot_enabled=False,
         base_dir=str(REPO),
     )
     campaign.agents_dir = str(REPO / "config" / "agents")

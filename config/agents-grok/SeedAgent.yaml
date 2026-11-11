@@ -33,7 +33,4 @@ dispatch:
   block_seconds: 0
   poll_seconds: 30
 status: native
-snapshot:
-  true: done
-  mode: artifacts
 model: grok-4.7
