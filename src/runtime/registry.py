@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -18,9 +18,6 @@ TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
 
 # Tools implemented as shell functions in src/tools/file/bin/defaults.sh.
 SOURCE_TOOL_LIST = {"open", "goto", "find_file", "edit", "scroll_down", "scroll_up"}
-
-# Tools the runtime implements itself (not shell scripts).
-ORCHESTRATION_TOOLS = {"send_agent_task", "wait_agent_task", "finish_task", "observe_current_states"}
 
 
 @dataclass(frozen=True)
@@ -103,10 +100,3 @@ def mcp_tool(spec: ToolSpec) -> dict[str, Any]:
         "description": spec.docstring,
         "inputSchema": parameters_schema(spec),
     }
-
-
-def select(tools: dict[str, ToolSpec], names: Iterable[str]) -> list[ToolSpec]:
-    missing = [name for name in names if name not in tools]
-    if missing:
-        raise KeyError(f"unknown tools: {', '.join(sorted(missing))}")
-    return [tools[name] for name in names]

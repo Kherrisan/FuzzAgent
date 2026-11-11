@@ -10,7 +10,6 @@ from __future__ import annotations
 import importlib
 import json
 from pathlib import Path
-from typing import Any
 
 from .config import AgentConfig, CampaignConfig
 
@@ -90,11 +89,3 @@ def _all_agents(campaign: CampaignConfig) -> dict[str, AgentConfig]:
     from .config import load_agents
 
     return load_agents(campaign.agents_dir, {"OUTPUT": campaign.output, "SRC": campaign.src})
-
-
-def write_agents_md(agent: AgentConfig, campaign: CampaignConfig, cwd: Path) -> Path:
-    """Codex reads ``AGENTS.md`` from its cwd; keep the same prompt there."""
-    cwd.mkdir(parents=True, exist_ok=True)
-    path = cwd / "AGENTS.md"
-    path.write_text(load_system_prompt(agent, campaign), encoding="utf-8")
-    return path

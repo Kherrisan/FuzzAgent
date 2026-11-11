@@ -287,21 +287,6 @@ def load_campaign(path: str | Path) -> CampaignConfig:
     return campaign
 
 
-def agent_context(campaign: CampaignConfig, agent: AgentConfig) -> dict[str, str]:
-    """Variables available to ``${...}`` inside agent definitions."""
-    home = agent.home or str(Path(campaign.output) / ".campaign" / "agents" / agent.role)
-    cwd = agent.cwd or str(Path(home) / "work")
-    return {
-        "OUTPUT": campaign.output,
-        "SRC": campaign.src,
-        "HOME": home,
-        "CWD": cwd,
-        "CAMPAIGN": campaign.name,
-        "SESSION": campaign.session,
-        "ROLE": agent.role,
-    }
-
-
 def render_agent(agent: AgentConfig, campaign: CampaignConfig) -> AgentConfig:
     """Apply campaign-scoped path expansion to one agent."""
     context = {

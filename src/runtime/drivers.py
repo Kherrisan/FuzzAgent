@@ -1,9 +1,8 @@
 """Per-CLI adapters.
 
-Each adapter knows three things the runtime cannot guess: how to launch the
-interactive agent, where that CLI wants its MCP servers configured, and how to
-resume a previous session.  Everything is best-effort and verified by the
-P2 capability probe (``campaignctl doctor``).
+Each adapter knows how to launch the interactive agent and where that CLI
+wants its MCP server configured.  Everything is best-effort and verified by
+the capability probe (``campaignctl doctor``).
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import json
 import os
 import shutil
 import subprocess
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,24 +29,17 @@ def _write(path: Path, text: str) -> None:
 @dataclass
 class Driver:
     name: str
-    session_glob: str = ""
 
     def prepare(self, agent: AgentConfig, campaign: CampaignConfig, home: Path, cwd: Path) -> None:
-        """Write MCP/session config before the terminal is launched."""
+        """Write MCP config before the terminal is launched."""
 
     def launch(self, agent: AgentConfig) -> list[str]:
         return list(agent.launch)
 
-    def resume(self, agent: AgentConfig, session_id: str) -> list[str] | None:
-        return None
-
-    def capture_session(self, home: Path) -> str | None:
-        return None
-
 
 class CodexDriver(Driver):
     def __init__(self) -> None:
-        super().__init__("codex", "**/sessions/**/*.jsonl")
+        super().__init__("codex")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
         config = home / ".codex" / "config.toml"
@@ -69,29 +60,10 @@ class CodexDriver(Driver):
 
             _write(agents_md, load_system_prompt(agent, campaign))
 
-    def resume(self, agent, session_id: str) -> list[str] | None:
-        base = [part for part in agent.launch if part not in {"--no-daemon"}]
-        return [*base, "resume", session_id]
-
-    def capture_session(self, home: Path) -> str | None:
-        files = sorted((home / ".codex" / "sessions").rglob("*.jsonl"), key=lambda p: p.stat().st_mtime)
-        for path in reversed(files):
-            try:
-                with path.open("r", encoding="utf-8") as handle:
-                    first = handle.readline()
-                data = json.loads(first)
-            except (OSError, json.JSONDecodeError):
-                continue
-            payload = data.get("payload") or {}
-            session = payload.get("id") or payload.get("session_id")
-            if session:
-                return str(session)
-        return None
-
 
 class GrokDriver(Driver):
     def __init__(self) -> None:
-        super().__init__("grok", "**/.grok/sessions/**")
+        super().__init__("grok")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
         if "--always-approve" not in agent.launch:
@@ -120,30 +92,10 @@ class GrokDriver(Driver):
             f"args = {json.dumps(_mcp_args(agent.role))}\n",
         )
 
-    def resume(self, agent, session_id: str) -> list[str] | None:
-        return [*agent.launch, "-r", session_id]
-
-    def capture_session(self, home: Path) -> str | None:
-        active = home / ".grok" / "active_sessions.json"
-        try:
-            data = json.loads(active.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        if isinstance(data, dict):
-            sessions = data.get("sessions") or data.get("active") or []
-        else:
-            sessions = data
-        if isinstance(sessions, list) and sessions:
-            entry = sessions[-1]
-            if isinstance(entry, dict):
-                return entry.get("session_id") or entry.get("id")
-            return str(entry)
-        return None
-
 
 class DshTuiDriver(Driver):
     def __init__(self) -> None:
-        super().__init__("dsh-tui", "**/sessions/*")
+        super().__init__("dsh-tui")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
         self._ensure_profile(home)
@@ -175,18 +127,10 @@ class DshTuiDriver(Driver):
             env=env,
         )
 
-    def resume(self, agent, session_id: str) -> list[str] | None:
-        return [*agent.launch, "--resume", session_id]
-
-    def capture_session(self, home: Path) -> str | None:
-        root = home / ".dsh" / "sessions"
-        entries = sorted(root.glob("*"), key=lambda p: p.stat().st_mtime) if root.is_dir() else []
-        return entries[-1].name if entries else None
-
 
 class PiDriver(Driver):
     def __init__(self) -> None:
-        super().__init__("pi", "**/.pi/agent/sessions/**")
+        super().__init__("pi")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
         config = home / ".pi" / "agent" / "mcp.json"
@@ -205,9 +149,6 @@ class PiDriver(Driver):
             )
             + "\n",
         )
-
-    def resume(self, agent, session_id: str) -> list[str] | None:
-        return [*agent.launch, "-r", session_id]
 
 
 class GenericDriver(Driver):
@@ -238,15 +179,3 @@ def probe_binaries(agents: dict[str, AgentConfig]) -> dict[str, str]:
         binary = shutil.which(agent.launch[0]) if agent.launch else None
         result[role] = binary or f"missing: {agent.launch[0] if agent.launch else '?'}"
     return result
-
-
-def session_age(home: Path, driver: Driver) -> float | None:
-    """Seconds since the newest recorded session, used for resume ordering."""
-    pattern = driver.session_glob
-    if not pattern:
-        return None
-    newest = None
-    for path in home.glob(pattern):
-        mtime = path.stat().st_mtime
-        newest = mtime if newest is None else max(newest, mtime)
-    return None if newest is None else time.time() - newest

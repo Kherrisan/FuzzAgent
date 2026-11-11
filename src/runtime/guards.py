@@ -234,10 +234,6 @@ def post_report(ctx: GuardContext, report: str) -> str:
     )
 
 
-def record_tool_call(ctx: GuardContext, name: str) -> None:
-    ctx.tool_calls.append(name)
-
-
 def verify_artifacts(paths: ProjectPaths) -> list[str]:
     """Structural checks shared by ``campaignctl doctor`` and the tests."""
     problems: list[str] = []
