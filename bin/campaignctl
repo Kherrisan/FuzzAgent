@@ -15,7 +15,11 @@ if not (REPO_ROOT / "src").is_dir():
 sys.path.insert(0, str(REPO_ROOT))
 os.environ.setdefault("FUZZAGENT_SKIP_ENV_INIT", "1")
 
-from src.runtime.campaign import CampaignController, load  # noqa: E402
+from src.runtime.campaign import CampaignController  # noqa: E402
+try:  # the controller may not re-export load()
+    from src.runtime.campaign import load  # noqa: E402
+except ImportError:  # pragma: no cover
+    from src.runtime.config import load_campaign as load  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
