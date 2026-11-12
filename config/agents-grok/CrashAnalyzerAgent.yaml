@@ -8,6 +8,10 @@ launch:
 - --reasoning-effort
 - high
 - --always-approve
+- --deny
+- Bash(campaignctl:*)
+- --deny
+- Bash(sudo:*)
 model: grok-4.7
 card: src/agents/CrashAnalyzerAgent/.well-know/agent.json
 home: ${OUTPUT}/.campaign/agents/CrashAnalyzerAgent/home

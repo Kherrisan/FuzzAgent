@@ -18,6 +18,7 @@ from .config import AgentConfig, CampaignConfig
 
 
 MCP_COMMAND = "/root/FuzzAgent/bin/fuzzagent-mcp"
+DENY_RULES = ("Bash(campaignctl:*)", "Bash(sudo:*)")
 
 
 def _mcp_command() -> str:
@@ -243,6 +244,7 @@ class GrokDriver(Driver):
         config = home / ".grok" / "config.toml"
         _write(
             config,
+            f"deny_rules = {json.dumps(list(DENY_RULES))}\n\n"
             "[mcp_servers.fuzzagent]\n"
             f'command = "{_mcp_command()}"\n'
             f"args = {json.dumps(_mcp_args(agent.role))}\n",

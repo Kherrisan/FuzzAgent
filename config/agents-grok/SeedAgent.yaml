@@ -8,6 +8,10 @@ launch:
 - --reasoning-effort
 - high
 - --always-approve
+- --deny
+- Bash(campaignctl:*)
+- --deny
+- Bash(sudo:*)
 card: src/agents/SeedAgent/.well-know/agent.json
 home: ${OUTPUT}/.campaign/agents/SeedAgent/home
 cwd: ${OUTPUT}/.campaign/agents/SeedAgent/work
