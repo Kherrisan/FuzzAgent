@@ -210,12 +210,11 @@ class GrokDriver(Driver):
         super().__init__("grok")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
-        # Mirror codex's workspace-write sandbox instead of bypassing approvals:
-        # file writes stay inside the configured profile, approvals are automatic.
-        if "--sandbox" not in agent.launch:
-            agent.launch = [*agent.launch, "--sandbox", "workspace-write"]
-        if "--permission-mode" not in agent.launch:
-            agent.launch = [*agent.launch, "--permission-mode", "auto"]
+        # Grok's own sandbox cannot be applied inside this container (it needs
+        # a bwrap plan the overlay/deny-list cannot satisfy), so run with full
+        # access and keep the per-role trust preset.
+        if "--always-approve" not in agent.launch:
+            agent.launch = [*agent.launch, "--always-approve"]
         # Pre-trust the role working directories so the TUI does not stop on
         # "Trust this folder?" before the first task.
         trust = home / ".grok" / "trust.json"

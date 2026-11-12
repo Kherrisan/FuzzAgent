@@ -7,10 +7,7 @@ launch:
 - grok-4.7
 - --reasoning-effort
 - high
-- --sandbox
-- workspace-write
-- --permission-mode
-- auto
+- --always-approve
 model: grok-4.7
 card: src/agents/HarnessAgent/.well-know/agent.json
 home: ${OUTPUT}/.campaign/agents/HarnessAgent/home
