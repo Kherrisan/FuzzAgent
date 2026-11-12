@@ -22,6 +22,21 @@ color_command() {
     printf '%s%s%s' "$RED" "$1" "$RESET"
 }
 
+# A new launch without --output gets its own directory. The stamp is local
+# time to the minute. A second launch in that same minute gets -2, -3, ...
+default_output_dir() {
+    local stamp base candidate n
+    stamp="$(date +%Y%m%d-%H%M)"
+    base="$ROOT_DIR/output/${TARGET}-${stamp}"
+    candidate="$base"
+    n=2
+    while [[ -e "$candidate" ]]; do
+        candidate="${base}-${n}"
+        n=$((n + 1))
+    done
+    printf '%s\n' "$candidate"
+}
+
 print_usage() {
     printf 'Usage: %s launch <source-directory-or-git-url> [options]\n       %s resume <output-directory> [options]\n       %s tui --output <directory> [hc-tui arguments...]\n       %s tui <container-name> [hc-tui arguments...]\n\n' "$0" "$0" "$0" "$0"
     cat <<'EOF'
@@ -49,7 +64,7 @@ Options for launch and resume (values follow each option):
   --no-proxy HOSTS          Proxy exclusions (default: localhost,127.0.0.1)
 
 Options for launch only:
-  --output DIR              Output directory (default: output/<target>)
+  --output DIR              Output directory (default: output/<target>-YYYYMMDD-HHMM)
   --engine hc|legacy        Runtime (default: hc)
   --config PATH             Campaign config inside the container (default: config/campaign.yaml)
   --session NAME            hc session (default: fz-<target>)
@@ -196,18 +211,18 @@ PY
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-    printf 'Docker was not found. Install Docker Engine and Docker Compose, then retry.\n' >&2
+    printf 'Docker was not found. Install Docker Engine, then retry.\n' >&2
     exit 1
 fi
-if ! docker info >/dev/null 2>&1; then
-    printf 'Docker is not available. Start Docker and make sure your user can access it, then retry.\n' >&2
+if docker info >/dev/null 2>&1; then
+    docker_cmd=(docker)
+elif sudo -n docker info >/dev/null 2>&1; then
+    docker_cmd=(sudo -n docker)
+else
+    printf 'Docker is unavailable or access was denied.\n' >&2
     exit 1
 fi
-if ! docker compose version >/dev/null 2>&1; then
-    printf 'Docker Compose v2 is required. Install the Docker Compose plugin, then retry.\n' >&2
-    exit 1
-fi
-if ! docker image inspect fuzzagent >/dev/null 2>&1; then
+if ! "${docker_cmd[@]}" image inspect fuzzagent >/dev/null 2>&1; then
     printf 'The local fuzzagent image was not found. Build it first with:\n  %sdocker buildx build -t fuzzagent -f %s%s %s\n' \
         "$RED" "$(color_path "$ROOT_DIR/docker/Dockerfile")" "$RED" "$(color_path "$ROOT_DIR")" >&2
     exit 1
@@ -261,7 +276,11 @@ if [[ "$ACTION" == launch ]]; then
             printf 'Source checkout ready: %s\n' "$(color_path "$TARGET_DIR")"
         fi
     fi
-    RAW_OUTPUT_DIR="$(realpath -m -- "${OUTPUT_ARG:-$ROOT_DIR/output/$TARGET}")"
+    if [[ -n "$OUTPUT_ARG" ]]; then
+        RAW_OUTPUT_DIR="$(realpath -m -- "$OUTPUT_ARG")"
+    else
+        RAW_OUTPUT_DIR="$(realpath -m -- "$(default_output_dir)")"
+    fi
     if [[ "$RAW_OUTPUT_DIR" == "$TARGET_DIR" || "$RAW_OUTPUT_DIR" == "$TARGET_DIR/"* ]]; then
         printf 'Output directory must be outside the source directory: %s\n' "$RAW_OUTPUT_DIR" >&2
         exit 1
@@ -315,15 +334,73 @@ printf '  Source:   %s\n' "$(color_path "$TARGET_DIR")"
 printf '  Results:  %s\n' "$(color_path "$RAW_OUTPUT_DIR")"
 printf '  Container: %s\n\n' "$CONTAINER_NAME"
 
-if ! docker compose --env-file /dev/null -p "$CONTAINER_NAME" -f "$ROOT_DIR/docker_template.yml" up -d; then
+mount_repo="$FUZZAGENT_DIR"
+mount_output="$RAW_OUTPUT_DIR"
+mount_src="$SRC_DIR"
+mount_auth="$FUZZAGENT_AUTH_DIR"
+if declare -F host_mount_path >/dev/null 2>&1; then
+    mount_repo="$(host_mount_path "$mount_repo")"
+    mount_output="$(host_mount_path "$mount_output")"
+    mount_src="$(host_mount_path "$mount_src")"
+    mount_auth="$(host_mount_path "$mount_auth")"
+fi
+if ! "${docker_cmd[@]}" run -d \
+    --name "$CONTAINER_NAME" \
+    --init \
+    --tty \
+    --interactive \
+    --security-opt seccomp=unconfined \
+    --security-opt apparmor=unconfined \
+    --cap-add SYS_ADMIN \
+    --cap-add NET_ADMIN \
+    --restart no \
+    -v "${mount_repo}:/root/FuzzAgent:${WRITE_MODE}" \
+    -v "${mount_output}:/root/FuzzAgent/output/${REPO_BASE_NAME}" \
+    -v "${mount_src}:/src/${REPO_BASE_NAME}" \
+    -v "${mount_auth}:/run/fuzzagent-auth:ro" \
+    -e "FUZZAGENT_AUTO_CLEAN=${FUZZAGENT_AUTO_CLEAN:-0}" \
+    -e "FUZZAGENT_RESUME=${FUZZAGENT_RESUME:-0}" \
+    -e "HC_SESSION=${HC_SESSION:-fz-${REPO_BASE_NAME}}" \
+    -e "FUZZAGENT_ENGINE=${FUZZAGENT_ENGINE:-hc}" \
+    -e "FUZZAGENT_CONFIG=${FUZZAGENT_CONFIG:-config/campaign.yaml}" \
+    -e "HOST_AUTH_DIR=${HOST_AUTH_DIR:-/run/fuzzagent-auth}" \
+    -e "REPO_BASE_NAME=${REPO_BASE_NAME}" \
+    -e "SRC=/root/src/${REPO_BASE_NAME}" \
+    -e "OUTPUT=/root/FuzzAgent/output/${REPO_BASE_NAME}" \
+    -e AFL_SKIP_CPUFREQ=1 \
+    -e "FUZZING_ENGINE=${FUZZING_ENGINE}" \
+    -e "GITHUB_TOKEN=${GITHUB_TOKEN}" \
+    -e "OPENAI_BASE_URL=${OPENAI_BASE_URL}" \
+    -e "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+    -e "OPENAI_MODEL=${OPENAI_MODEL}" \
+    -e "LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.6}" \
+    -e "LLM_TOP_P=${LLM_TOP_P:-0.9}" \
+    -e "LLM_TOP_K=${LLM_TOP_K:-20}" \
+    -e "LLM_REPLY_TIMEOUT=${LLM_REPLY_TIMEOUT:-600}" \
+    -e "MAX_AGENT_EPOCHS=${MAX_AGENT_EPOCHS:-100}" \
+    -e "FUZZING_DURATION=${FUZZING_DURATION:-24h}" \
+    -e "REMINDER_TOKEN_RATIO=${REMINDER_TOKEN_RATIO:-0.8}" \
+    -e "MAX_TOKEN_LEN=${MAX_TOKEN_LEN:-128000}" \
+    -e "OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID:-}" \
+    -e "OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET:-}" \
+    -e "OSS_ENDPOINT=${OSS_ENDPOINT:-}" \
+    -e "OSS_BUCKET=${OSS_BUCKET:-}" \
+    -e "http_proxy=${http_proxy:-}" \
+    -e "https_proxy=${https_proxy:-}" \
+    -e "HTTP_PROXY=${HTTP_PROXY:-}" \
+    -e "HTTPS_PROXY=${HTTPS_PROXY:-}" \
+    -e "no_proxy=${no_proxy:-localhost,127.0.0.1,211.65.197.92}" \
+    -e "NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,211.65.197.92}" \
+    fuzzagent \
+    /bin/bash -c "$COMMAND"; then
     printf '\nCould not start the benchmark container. Check the Docker output above.\n' >&2
     exit 1
 fi
 
-CONTAINER_STATUS="$(docker inspect --format '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || true)"
+CONTAINER_STATUS="$("${docker_cmd[@]}" inspect --format '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || true)"
 if [[ "$CONTAINER_STATUS" != "running" ]]; then
     printf '\nThe container did not stay running (status: %s). Recent logs:\n' "${CONTAINER_STATUS:-unknown}" >&2
-    docker logs --tail 40 "$CONTAINER_NAME" 2>&1 || true
+    "${docker_cmd[@]}" logs --tail 40 "$CONTAINER_NAME" 2>&1 || true
     printf 'For more details, run: %s\n' "$(color_command "docker logs $CONTAINER_NAME")" >&2
     exit 1
 fi

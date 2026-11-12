@@ -26,6 +26,7 @@ declare -A TARGET_REPOS=(
     [protobuf]=https://github.com/protocolbuffers/protobuf.git
     [opencv]=https://github.com/opencv/opencv.git
     [gnutls]=https://github.com/gnutls/gnutls.git
+    [wolfssl]=https://github.com/wolfSSL/wolfssl.git
 )
 
 if [[ -t 1 && -z "${NO_COLOR+x}" && "${TERM:-}" != "dumb" ]]; then

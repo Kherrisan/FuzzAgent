@@ -23,9 +23,12 @@ if [[ "$ENGINE" == "hc" ]]; then
     if [[ "${FUZZAGENT_RESUME:-0}" == 1 ]]; then
         resume_args+=(--resume)
     fi
+    CTL=campaignctl
+    if [[ -x /root/FuzzAgent/bin/campaignctl ]]; then
+        CTL=/root/FuzzAgent/bin/campaignctl
+    fi
+    bash /root/FuzzAgent/src/tools/copy_tools.sh
     exec timeout --signal=INT --kill-after=60s "$BENCHMARK_DURATION" \
-        CTL="campaignctl"
-        [[ -x /root/FuzzAgent/bin/campaignctl ]] && CTL=/root/FuzzAgent/bin/campaignctl
         "$CTL" --config "$CONFIG" up "${resume_args[@]}"
 fi
 

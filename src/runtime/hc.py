@@ -14,6 +14,7 @@ import shlex
 import subprocess
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -77,6 +78,37 @@ class Terminal:
         )
 
 
+# sun_path holds 108 bytes including the trailing NUL.
+_SOCKET_LIMIT = 107
+
+
+def herdr_holder_socket(state_home: str, session: str) -> str:
+    """Longest socket name hc refuses: ``<session>.holder.<8 hex>.sock``."""
+    return str(
+        Path(state_home) / "herdr-core" / session / f"{session}.holder.00000000.sock"
+    )
+
+
+def pin_hc_state_home(env: dict[str, str]) -> None:
+    """Keep hc's session socket on a path that fits in ``sun_path``.
+
+    The core listens under ``$HOME/.local/state`` of the controller
+    (``/root``). A role MCP process has ``HOME`` set to its campaign
+    directory, and that default socket is longer than 107 bytes, so ``hc ls``
+    exits before it can see the session. ``XDG_STATE_HOME`` selects the same
+    short directory.
+    """
+    if env.get("XDG_STATE_HOME"):
+        return
+    home = env.get("HOME") or str(Path.home())
+    session = env.get("HC_SESSION") or "session"
+    default = herdr_holder_socket(str(Path(home) / ".local" / "state"), session)
+    if len(default) <= _SOCKET_LIMIT:
+        return
+    if Path("/root").is_dir():
+        env["XDG_STATE_HOME"] = "/root/.local/state"
+
+
 class HC:
     def __init__(self, binary: str = "hc", session: str | None = None, env: dict[str, str] | None = None):
         self.binary = binary
@@ -87,6 +119,7 @@ class HC:
         # hc selects the core session through the environment, not a global flag.
         if self.session:
             self.env["HC_SESSION"] = self.session
+        pin_hc_state_home(self.env)
 
     # --- plumbing ---------------------------------------------------------
     def _invoke(self, args: list[str], timeout: int = 60) -> Any:

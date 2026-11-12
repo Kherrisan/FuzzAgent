@@ -7,6 +7,10 @@ launch:
 - grok-4.7
 - --reasoning-effort
 - high
+- --sandbox
+- workspace-write
+- --permission-mode
+- auto
 model: grok-4.7
 card: src/agents/ManagerAgent/.well-know/agent.json
 home: ${OUTPUT}/.campaign/agents/ManagerAgent/home

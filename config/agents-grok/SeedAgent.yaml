@@ -7,6 +7,10 @@ launch:
 - grok-4.7
 - --reasoning-effort
 - high
+- --sandbox
+- workspace-write
+- --permission-mode
+- auto
 card: src/agents/SeedAgent/.well-know/agent.json
 home: ${OUTPUT}/.campaign/agents/SeedAgent/home
 cwd: ${OUTPUT}/.campaign/agents/SeedAgent/work

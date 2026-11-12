@@ -1,8 +1,16 @@
 role: CoverageAnalyzerAgent
 enabled: true
 driver: codex
-launch: ["codex", "--no-daemon"]
-model: gpt-5.1-codex
+launch:
+- codex
+- --no-daemon
+- --model
+- gpt-6-luna
+- -c
+- model_reasoning_effort="high"
+- -c
+- check_for_update_on_startup=false
+model: gpt-6-luna
 provider: openai
 card: src/agents/CoverageAnalyzerAgent/.well-know/agent.json
 

@@ -128,6 +128,30 @@ def test_drivers_still_launch_fuzzagent_mcp_over_stdio(campaign: CampaignConfig,
     codex = (tmp_path / "codex" / ".codex" / "config.toml").read_text(encoding="utf-8")
     assert 'command = "fuzzagent-mcp"' in codex
     assert 'args = ["--role", "ManagerAgent"]' in codex
+    assert 'default_tools_approval_mode = "approve"' in codex
+    for name in agent.tools.enabled:
+        assert f"[mcp_servers.fuzzagent.tools.{name}]\napproval_mode = \"approve\"" in codex
+    assert 'sandbox_mode = "workspace-write"' in codex
+    assert "danger-full-access" not in codex
+    assert "network_access = true" in codex
+    assert f'writable_roots = ["{campaign.output}"]' in codex
+    assert "[mcp_servers.fuzzagent.env]" in codex
+    assert f'SRC = "{campaign.src}"' in codex
+    assert f'OUTPUT = "{campaign.output}"' in codex
+    assert campaign.src not in codex.split("[mcp_servers.fuzzagent.env]", 1)[0]
+    assert 'trust_level = "trusted"' in codex
+    assert "check_for_update_on_startup = false" in codex
+    assert f'[projects."{agent.cwd}"]' in codex
+    assert f'[projects."{campaign.output}"]' in codex
+    assert (Path(campaign.output) / ".git").exists()
+    for name in (".agents", ".codex", ".aws"):
+        assert (Path(campaign.output) / name).is_dir()
+    rules = (tmp_path / "codex" / ".codex" / "rules" / "fuzzagent.rules").read_text(encoding="utf-8")
+    assert 'pattern = ["campaignctl"]' in rules
+    assert 'decision = "forbidden"' in rules
+    agent.driver = "codex"
+    argv = driver_for(agent).launch(agent)
+    assert argv[-2:] == ["-c", "check_for_update_on_startup=false"]
     grok = (tmp_path / "grok" / ".grok" / "config.toml").read_text(encoding="utf-8")
     assert 'command = "fuzzagent-mcp"' in grok
     assert 'args = ["--role", "ManagerAgent"]' in grok

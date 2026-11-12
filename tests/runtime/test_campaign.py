@@ -33,6 +33,26 @@ def controller(tmp_path: Path) -> CampaignController:
     return CampaignController(campaign, hc=FakeHC())
 
 
+def test_prepare_chowns_output_to_root(controller: CampaignController, monkeypatch: pytest.MonkeyPatch):
+    output = Path(controller.campaign.output)
+    seen: list[tuple[Path, int, int]] = []
+    monkeypatch.setattr("src.runtime.campaign.os.geteuid", lambda: 0)
+    monkeypatch.setattr(
+        "src.runtime.campaign.os.chown",
+        lambda path, uid, gid: seen.append((Path(path), uid, gid)),
+    )
+    controller.prepare()
+    assert seen == [(output, 0, -1)]
+
+
+def test_prepare_skips_chown_when_not_root(controller: CampaignController, monkeypatch: pytest.MonkeyPatch):
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr("src.runtime.campaign.os.geteuid", lambda: 1013)
+    monkeypatch.setattr("src.runtime.campaign.os.chown", lambda *args: calls.append(args))
+    controller.prepare()
+    assert calls == []
+
+
 def test_prepare_creates_tree_and_renders_roles(controller: CampaignController):
     controller.prepare()
     campaign_dir = Path(controller.campaign.output) / ".campaign"

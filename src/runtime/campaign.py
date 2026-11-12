@@ -23,6 +23,20 @@ from .orchestrator import Orchestrator
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _own_output_as_root(output: Path) -> None:
+    """Make the campaign output directory owned by uid 0.
+
+    bubblewrap maps its uid 0 to the outer uid 0 and drops
+    ``CAP_DAC_OVERRIDE``, so it can create entries only where the mode bits
+    allow uid 0. The group is left unchanged.
+    """
+    if os.geteuid() != 0:
+        return
+    if output.stat().st_uid == 0:
+        return
+    os.chown(output, 0, -1)
+
+
 class CampaignController:
     def __init__(self, campaign: CampaignConfig, hc: HC | None = None):
         self.campaign = campaign
@@ -48,6 +62,7 @@ class CampaignController:
         self.orchestrator.campaign_dir.mkdir(parents=True, exist_ok=True)
         (self.orchestrator.campaign_dir / "agents").mkdir(parents=True, exist_ok=True)
         (self.orchestrator.campaign_dir / "tasks").mkdir(parents=True, exist_ok=True)
+        _own_output_as_root(root)
 
         for agent in self.agents.values():
             self.orchestrator.prepare_role(agent)

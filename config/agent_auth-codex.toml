@@ -1,0 +1,30 @@
+# Codex-only profile: every role reuses the host machine's Codex auth file.
+#
+# Host side: put the CLI login at ${HOST_AUTH_DIR}/codex/auth.json
+#   (bin/collect-auth copies ~/.codex/auth.json to ./.cache/auth/codex/auth.json).
+# Container: campaignctl copies it into each role HOME as .codex/auth.json,
+# mode 0600. Missing sources are reported by doctor and skipped.
+
+[ManagerAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[BuilderAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[DictionaryAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[SeedAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[HarnessAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[FuzzerExecutorAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[CrashAnalyzerAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[CoverageAnalyzerAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"

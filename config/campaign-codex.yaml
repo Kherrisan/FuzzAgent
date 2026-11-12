@@ -1,0 +1,38 @@
+# Campaign profile: every role runs the Codex CLI (model gpt-6-luna-high).
+#
+#   export SRC=/src/wolfssl OUTPUT=$PWD/output/wolfssl HC_SESSION=fz-wolfssl
+#   export HOST_AUTH_DIR=/run/fuzzagent-auth
+#   campaignctl --config config/campaign-codex.yaml prepare
+#   campaignctl --config config/campaign-codex.yaml up --resume
+
+name: "${REPO_BASE_NAME}"
+target: "${REPO_BASE_NAME}"
+src: "${SRC}"
+output: "${OUTPUT}"
+session: "${HC_SESSION}"
+
+duration_hours: 24
+coverage_guidance: true
+
+engine: hc
+manager_role: ManagerAgent
+agents_dir: config/agents-codex
+
+# Every role gets the host machine's Codex credentials, copied into its own
+# isolated HOME before the terminal starts.
+auth_config: config/agent_auth-codex.toml
+
+max_rounds: 0
+
+hc:
+  binary: hc
+  session: "${HC_SESSION}"
+  wait_timeout: 300
+  poll_seconds: 30
+  keep: true
+  outlive_parent: true
+
+
+resume:
+  mode: auto
+  brief_tasks: 10

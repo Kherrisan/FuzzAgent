@@ -194,7 +194,7 @@ RUN set -eux; \
 
 # hc-tui: terminal UI for the hc session already running in this image.
 # The core is installed above, so skip the installer's own hc download.
-# Keep this pin in sync with HC_TUI_VERSION in bin/hc-tui.sh.
+# bin/hc-tui.sh expects this binary and hc-tui-attach to already be in the image.
 ARG HC_TUI_VERSION=0.1.2
 RUN curl -fsSL https://followcat.github.io/hc-tui/install.sh \
         | HC_TUI_VERSION="${HC_TUI_VERSION}" \

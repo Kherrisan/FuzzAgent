@@ -70,7 +70,7 @@ For the legacy runtime, supply `--engine legacy --api-key <key> --model <model>`
 
 The launcher clones the repository and starts `fuzzagent-cjson` in the background. You can also pass a local source directory, for example `./benchmark/run.sh launch /path/to/cJSON`. The default campaign runs for **24 hours**; pass `--duration 10m` for a shorter run. Run `./benchmark/run.sh --help` for all options and defaults.
 
-By default, results go to `output/<target>`. To choose a different directory, pass `--output`:
+By default, results go to `output/<target>-YYYYMMDD-HHMM`, for example `output/wolfssl-20261112-1632`. A second launch in the same minute uses the next free suffix, such as `output/wolfssl-20261112-1632-2`. To choose a different directory, pass `--output`:
 
 ```bash
 ./benchmark/run.sh launch /path/to/cJSON --output /path/to/results

@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
 # Enter a running container and start hc-tui on its existing hc session.
-# Keep HC_TUI_VERSION in sync with the pin in docker/Dockerfile.
 set -euo pipefail
-
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HC_TUI_VERSION="${HC_TUI_VERSION:-0.1.2}"
 
 usage() {
     cat <<EOF
 Usage: bin/hc-tui.sh [container] [hc-tui args]
 
 Enter a running container and start hc-tui on the hc session it is already
-serving. When the container has no hc-tui binary yet, this installs release
-v${HC_TUI_VERSION} into /usr/local/bin first.
+serving. The image must already provide hc-tui and hc-tui-attach.
 
   bin/hc-tui.sh
   bin/hc-tui.sh fuzz-gnutls-stdio-3h
@@ -89,18 +84,19 @@ if [[ "$state" != "running" ]]; then
     exit 1
 fi
 
-if ! "${DOCKER[@]}" exec "$container" command -v hc-tui >/dev/null 2>&1; then
-    printf 'Installing hc-tui %s into %s\n' "$HC_TUI_VERSION" "$container"
-    "${DOCKER[@]}" exec \
-        -e "HC_TUI_VERSION=${HC_TUI_VERSION}" \
-        -e HC_TUI_INSTALL_DIR=/usr/local/bin \
-        -e HC_TUI_SKIP_CORE=1 \
-        "$container" \
-        sh -c 'curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh'
+# `command` is a shell builtin. docker exec looks up a binary, so this has to
+# run inside sh.
+missing="$("${DOCKER[@]}" exec "$container" sh -c '
+    missing=
+    command -v hc-tui >/dev/null 2>&1 || missing="$missing hc-tui"
+    command -v hc-tui-attach >/dev/null 2>&1 || missing="$missing hc-tui-attach"
+    printf "%s" "$missing"
+')"
+if [[ -n "$missing" ]]; then
+    printf 'Container %s is missing:%s\n' "$container" "$missing" >&2
+    printf 'Rebuild the fuzzagent image. This script does not install them.\n' >&2
+    exit 1
 fi
-
-"${DOCKER[@]}" cp "$ROOT_DIR/bin/hc-tui-attach" "$container:/usr/local/bin/hc-tui-attach"
-"${DOCKER[@]}" exec "$container" chmod 755 /usr/local/bin/hc-tui-attach
 
 if [[ ! -t 0 || ! -t 1 ]]; then
     printf 'hc-tui needs an interactive terminal. Run bin/hc-tui.sh from a shell.\n' >&2
