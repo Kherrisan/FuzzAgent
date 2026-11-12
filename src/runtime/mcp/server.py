@@ -180,12 +180,24 @@ def _text_result(text: str, is_error: bool = False) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
+FINISH_ALIAS = "exit"
+
+
 def call_tool(runtime: ToolRuntime, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    if name == FINISH_ALIAS and "finish_task" in runtime.tools:
+        # Legacy role prompts still ask for the old "exit" tool.
+        name = "finish_task"
     return runtime.call(name, arguments)
 
 
 def tool_list(runtime: ToolRuntime) -> list[dict[str, Any]]:
-    return [mcp_tool(runtime.tools[name]) for name in runtime.tools]
+    tools = [mcp_tool(runtime.tools[name]) for name in runtime.tools]
+    if "finish_task" in runtime.tools:
+        alias = mcp_tool(runtime.tools["finish_task"])
+        alias["name"] = FINISH_ALIAS
+        alias["description"] = "Alias of finish_task; call it when the task is done."
+        tools.append(alias)
+    return tools
 
 
 class McpServer:
