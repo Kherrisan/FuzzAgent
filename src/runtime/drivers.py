@@ -17,6 +17,15 @@ from pathlib import Path
 from .config import AgentConfig, CampaignConfig
 
 
+MCP_COMMAND = "/root/FuzzAgent/bin/fuzzagent-mcp"
+
+
+def _mcp_command() -> str:
+    home = os.environ.get("FUZZAGENT_HOME") or "/root/FuzzAgent"
+    path = Path(home) / "bin" / "fuzzagent-mcp"
+    return str(path) if path.exists() else MCP_COMMAND
+
+
 def _mcp_args(role: str) -> list[str]:
     return ["--role", role]
 
@@ -175,7 +184,7 @@ class CodexDriver(Driver):
             f"writable_roots = [{writable}]",
             "",
             "[mcp_servers.fuzzagent]",
-            'command = "fuzzagent-mcp"',
+            f'command = "{_mcp_command()}"',
             f"args = {json.dumps(_mcp_args(agent.role))}",
             # approval_policy=never rejects MCP calls that still need a prompt.
             # approve runs this server's tools without a prompt.
@@ -235,7 +244,7 @@ class GrokDriver(Driver):
         _write(
             config,
             "[mcp_servers.fuzzagent]\n"
-            'command = "fuzzagent-mcp"\n'
+            f'command = "{_mcp_command()}"\n'
             f"args = {json.dumps(_mcp_args(agent.role))}\n",
         )
 
@@ -254,7 +263,7 @@ class DshTuiDriver(Driver):
             "  config:\n"
             "    transport: stdio\n"
             "    serverName: fuzzagent\n"
-            '    command: "fuzzagent-mcp"\n'
+            f'    command: "{_mcp_command()}"\n'
             f"    args: {json.dumps(_mcp_args(agent.role))}\n",
         )
         agent.launch = [*agent.launch, "--patch", str(patch)]
@@ -287,7 +296,7 @@ class PiDriver(Driver):
                 {
                     "mcpServers": {
                         "fuzzagent": {
-                            "command": "fuzzagent-mcp",
+                            "command": _mcp_command(),
                             "args": _mcp_args(agent.role),
                         }
                     }
