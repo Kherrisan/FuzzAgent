@@ -205,8 +205,8 @@ RUN curl -fsSL https://followcat.github.io/hc-tui/install.sh \
 
 # The MCP server every agent CLI spawns; the controller entrypoint.
 # hc-tui-attach opens the TUI on the container's existing hc session.
-COPY bin/fuzzagent-mcp bin/campaignctl bin/hc-tui-attach /usr/local/bin/
-RUN chmod +x /usr/local/bin/fuzzagent-mcp /usr/local/bin/campaignctl /usr/local/bin/hc-tui-attach
+COPY bin/fuzzagent-mcp bin/hc-tui-attach /usr/local/bin/
+RUN chmod +x /usr/local/bin/fuzzagent-mcp /usr/local/bin/hc-tui-attach
 
 # --- project Python environment (source stays mounted, deps are baked) ------
 # `uv run` at runtime must not need the network: pin the project environment
