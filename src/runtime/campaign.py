@@ -59,6 +59,13 @@ class CampaignController:
             "coverage_guidance", "crash_reports", ".cache",
         ):
             (root / directory).mkdir(parents=True, exist_ok=True)
+        # Install the tool scripts (observe_current_states, project_utils, ...)
+        # so agent MCP tools find them on PATH.
+        import subprocess
+
+        script = Path(self.campaign.base_dir or ".") / "src" / "tools" / "copy_tools.sh"
+        if script.exists():
+            subprocess.run(["bash", str(script)], check=False)
         self.orchestrator.campaign_dir.mkdir(parents=True, exist_ok=True)
         (self.orchestrator.campaign_dir / "agents").mkdir(parents=True, exist_ok=True)
         (self.orchestrator.campaign_dir / "tasks").mkdir(parents=True, exist_ok=True)
