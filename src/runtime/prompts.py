@@ -35,12 +35,13 @@ End every round with `finish_task`; never end a turn without it. `exit_reason`
 must name the condition and the task ids it refers to.
 - `status="done"`: every sub-agent task dispatched in this campaign has finished,
   and none failed or blocked.
-- `status="blocked"`: anything less - a sub-agent still `working`, one that
-  failed or blocked, a decision you need, or several checks with no change.
+- `status="blocked"`: anything less - a finished task failed or blocked, a
+  decision you need, or several checks with no change.
 
-Check `observe_agent_states` (status/turn) and `observe_current_states` before
-deciding. Ending a round while any dispatched agent is still working is
-`blocked`, not `done`.
+Never call `finish_task` - neither `done` nor `blocked` - while any dispatched
+agent is working: stay in this turn and re-check with `observe_agent_states` /
+`wait_agent_task` until it stops or exits. Check `observe_agent_states`
+(status/turn) and `observe_current_states` before deciding.
 """
 
 
