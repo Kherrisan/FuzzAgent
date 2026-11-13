@@ -15,6 +15,15 @@ from .config import AgentConfig, CampaignConfig
 
 RESPONSE_FORMAT_ATTR = "RESPONSE_FORMAT_PROMPT"
 
+COMPLETION_DIRECTIVE = """
+
+# Task completion (mandatory)
+When your task is complete, you MUST call the MCP tool `finish_task` and pass a
+concise `exit_reason` describing what you did and the evidence (files, commands,
+results). Do not end your turn without calling it. If `finish_task` returns a
+reminder, fix the problem and call it again. `exit` is accepted as an alias.
+"""
+
 
 def _import_attr(source: str) -> str:
     module_name, _, attr = source.partition(":")
@@ -32,6 +41,8 @@ def load_system_prompt(agent: AgentConfig, campaign: CampaignConfig) -> str:
     if not campaign.coverage_guidance and agent.prompt.guidance_variant:
         source = agent.prompt.guidance_variant
     prompt = _import_attr(source)
+    prompt = prompt.replace("`exit` tool", "`finish_task` tool").replace("exit tool", "finish_task tool")
+    prompt += COMPLETION_DIRECTIVE
     if agent.prompt.response_format:
         prompt += _import_attr("src.planning.prompt:RESPONSE_FORMAT_PROMPT")
     return prompt
