@@ -66,7 +66,7 @@ def test_every_role_is_loadable_and_renders(campaign: CampaignConfig):
             assert rendered.mcp.transport == "stdio", rendered.role
             assert rendered.mcp.server == "fuzzagent-mcp", rendered.role
             if rendered.role == "ManagerAgent":
-                assert "finish_task" not in enabled, rendered.role
+                assert "finish_task" in enabled, rendered.role
                 assert "send_agent_task" in enabled
                 assert "wait_agent_task" in enabled
             else:
