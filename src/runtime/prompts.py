@@ -31,17 +31,16 @@ failed, use `status="failed"`. Never end your turn without calling `finish_task`
 MANAGER_COMPLETION_DIRECTIVE = """
 
 # Every round
-End every round with `finish_task`; never end a turn without it.
-- `status="done"`: one line on what you observed and dispatched.
-- `status="blocked"`: only when you truly cannot progress - a child reports
-  `blocked`, you need a decision, or nothing changed across several checks
-  (same `observe_agent_states` status/turn AND same `observe_current_states`
-  plus `screen_command` output).
+End every round with `finish_task`; never end a turn without it. `exit_reason`
+must name the condition and the task ids it refers to.
+- `status="done"`: every sub-agent task dispatched in this campaign has finished,
+  and none failed or blocked.
+- `status="blocked"`: anything less - a sub-agent still `working`, one that
+  failed or blocked, a decision you need, or several checks with no change.
 
-A child whose status is `working` is still progressing, even if artifacts look
-unchanged: never call blocked while any dispatched agent is working. While one
-runs, stay in this turn and check it with `observe_agent_states` /
-`wait_agent_task` before deciding anything else.
+Check `observe_agent_states` (status/turn) and `observe_current_states` before
+deciding. Ending a round while any dispatched agent is still working is
+`blocked`, not `done`.
 """
 
 
