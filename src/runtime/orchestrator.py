@@ -183,11 +183,9 @@ class Orchestrator:
         state = self.read_state(role)
         primed = bool(state.get("primed"))
         context_file = directory / "task_with_context.md"
+        done = " Call the finish_task tool when the task is done."
         if primed:
-            message = (
-                f"Read your next task from {context_file} and execute it. "
-                "Call the finish_task tool when the task is done."
-            )
+            message = f"Read your next task from {context_file} and execute it.{done}"
         else:
             prime_file = self.role_dir(role) / "prime.md"
             prime_file.write_text(
@@ -195,7 +193,7 @@ class Orchestrator:
             )
             message = (
                 f"Your role instructions are in {prime_file}; read that file completely and follow it. "
-                f"Your first task is in {context_file}. Call the finish_task tool when the task is done."
+                f"Your first task is in {context_file}.{done}"
             )
         previous_turn = terminal.turn
         record = TaskRecord(task_id=task_id, role=role, started=time.time(), terminal=terminal.address)

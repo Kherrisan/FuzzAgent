@@ -145,7 +145,7 @@ class BaseAgent(ABC):
                     function_call, arguments = tool_call.function_call, tool_call.arguments
                     if function_call == "send_agent_task":
                         observation = self.handle_agent_action(arguments)
-                    elif function_call in {"finish_task", "exit"}:
+                    elif function_call == "finish_task":
                         if self.is_force_exit(arguments):
                             self.exit_reason = self.register_agent_post_call(exit_reason=str(arguments))
                             self.logger.info(msg=f"Agent forced to exit with exit reason: {self.exit_reason}")

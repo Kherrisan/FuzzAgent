@@ -24,7 +24,10 @@ DENY_RULES = ("Bash(campaignctl:*)", "Bash(sudo:*)")
 def _mcp_command() -> str:
     home = os.environ.get("FUZZAGENT_HOME") or "/root/FuzzAgent"
     path = Path(home) / "bin" / "fuzzagent-mcp"
-    return str(path) if path.exists() else MCP_COMMAND
+    try:
+        return str(path) if path.exists() else MCP_COMMAND
+    except OSError:
+        return MCP_COMMAND
 
 
 def _mcp_args(role: str) -> list[str]:

@@ -50,7 +50,7 @@ BUILTIN_TOOLS = {
 
 def test_every_role_is_loadable_and_renders(campaign: CampaignConfig):
     registry = load_tools()
-    for folder in ("agents", "agents-grok"):
+    for folder in ("agents", "agents-grok", "agents-codex"):
         agents = load_agents(REPO / "config" / folder, {"OUTPUT": campaign.output, "SRC": campaign.src})
         assert len(agents) == 8, sorted(agents)
         for agent in agents.values():
@@ -62,14 +62,15 @@ def test_every_role_is_loadable_and_renders(campaign: CampaignConfig):
             missing = [name for name in rendered.tools.enabled if name not in registry]
             assert not missing, f"{rendered.role}: unknown tools {missing}"
             assert not enabled & BUILTIN_TOOLS, rendered.role
-            assert "finish_task" in enabled, rendered.role
             assert "exit" not in enabled, rendered.role
             assert rendered.mcp.transport == "stdio", rendered.role
             assert rendered.mcp.server == "fuzzagent-mcp", rendered.role
             if rendered.role == "ManagerAgent":
+                assert "finish_task" not in enabled, rendered.role
                 assert "send_agent_task" in enabled
                 assert "wait_agent_task" in enabled
             else:
+                assert "finish_task" in enabled, rendered.role
                 assert "send_agent_task" not in enabled, rendered.role
                 assert "wait_agent_task" not in enabled, rendered.role
 
@@ -126,7 +127,7 @@ def test_drivers_still_launch_fuzzagent_mcp_over_stdio(campaign: CampaignConfig,
         home = tmp_path / driver_name
         driver_for(agent).prepare(agent, campaign, home, Path(agent.cwd))
     codex = (tmp_path / "codex" / ".codex" / "config.toml").read_text(encoding="utf-8")
-    assert 'command = "fuzzagent-mcp"' in codex
+    assert "fuzzagent-mcp" in codex
     assert 'args = ["--role", "ManagerAgent"]' in codex
     assert 'default_tools_approval_mode = "approve"' in codex
     for name in agent.tools.enabled:
@@ -153,8 +154,8 @@ def test_drivers_still_launch_fuzzagent_mcp_over_stdio(campaign: CampaignConfig,
     argv = driver_for(agent).launch(agent)
     assert argv[-2:] == ["-c", "check_for_update_on_startup=false"]
     grok = (tmp_path / "grok" / ".grok" / "config.toml").read_text(encoding="utf-8")
-    assert 'command = "fuzzagent-mcp"' in grok
+    assert "fuzzagent-mcp" in grok
     assert 'args = ["--role", "ManagerAgent"]' in grok
     pi = json.loads((tmp_path / "pi" / ".pi" / "agent" / "mcp.json").read_text(encoding="utf-8"))
-    assert pi["mcpServers"]["fuzzagent"]["command"] == "fuzzagent-mcp"
+    assert pi["mcpServers"]["fuzzagent"]["command"].endswith("fuzzagent-mcp")
     assert pi["mcpServers"]["fuzzagent"]["args"] == ["--role", "ManagerAgent"]

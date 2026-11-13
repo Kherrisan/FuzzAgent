@@ -91,6 +91,20 @@ def orchestrator(campaign, tmp_path):
     return OrchestratorStub(campaign, {"HarnessAgent": agent}, hc=fake, observer=lambda: '{"ok": true}'), fake
 
 
+def test_manager_dispatch_asks_for_finish_task(campaign, tmp_path):
+    agent = render_agent(load_agent(REPO / "config" / "agents" / "ManagerAgent.yaml"), campaign)
+    agent.home = str(tmp_path / "home")
+    agent.cwd = str(tmp_path / "work")
+    agent.source_path = str(REPO / "config" / "agents" / "ManagerAgent.yaml")
+    fake = FakeHC()
+    orch = OrchestratorStub(campaign, {"ManagerAgent": agent}, hc=fake, observer=lambda: "{}")
+    orch.dispatch("ManagerAgent", "continue")
+    assert "finish_task" in fake.sent[0]
+    prime = (Path(campaign.output) / ".campaign" / "agents" / "ManagerAgent" / "prime.md").read_text()
+    assert "call the MCP tool `finish_task`" in prime
+    assert "Do not call `finish_task`" not in prime
+
+
 def test_first_dispatch_primes_the_agent(orchestrator, campaign):
     orch, fake = orchestrator
     result = orch.dispatch("HarnessAgent", "write harness_000")

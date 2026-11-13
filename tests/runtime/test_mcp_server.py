@@ -17,6 +17,7 @@ from src.runtime.mcp.server import (
     main,
     make_dispatcher,
     read_task_id,
+    tool_list,
 )
 from src.runtime.registry import load_tools
 
@@ -119,6 +120,28 @@ def test_finish_history_stays_on_its_own_task(runtime: ToolRuntime):
     rejected = call_tool(other, "finish_task", {"exit_reason": "ok", "force": False})
     assert "Finish rejected" in rejected["content"][0]["text"]
     assert not (other.task_dir / "finish_task.json").exists()
+
+
+def test_manager_can_finish_task(runtime: ToolRuntime):
+    tools = load_tools()
+    manager = ToolRuntime(
+        role="ManagerAgent",
+        paths=runtime.paths,
+        tools={
+            name: tools[name]
+            for name in ("send_agent_task", "wait_agent_task", "observe_current_states", "finish_task")
+        },
+        task_id="manager-1",
+    )
+    names = {tool["name"] for tool in tool_list(manager)}
+    assert "finish_task" in names
+
+    accepted = call_tool(manager, "finish_task", {"exit_reason": "round done", "force": False})
+    assert accepted["isError"] is False
+    assert "Finish accepted" in accepted["content"][0]["text"]
+    assert (manager.task_dir / "finish_task.json").exists()
+    assert (manager.task_dir / "report.md").read_text() == "round done"
+
 
 
 def test_only_manager_reaches_the_dispatcher(runtime: ToolRuntime):

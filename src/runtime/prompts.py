@@ -21,7 +21,17 @@ COMPLETION_DIRECTIVE = """
 When your task is complete, you MUST call the MCP tool `finish_task` and pass a
 concise `exit_reason` describing what you did and the evidence (files, commands,
 results). Do not end your turn without calling it. If `finish_task` returns a
-reminder, fix the problem and call it again. `exit` is accepted as an alias.
+reminder, fix the problem and call it again.
+"""
+
+MANAGER_COMPLETION_DIRECTIVE = """
+
+# Task completion
+When this round is complete, call the MCP tool `finish_task` and pass a concise
+`exit_reason` describing what you observed and what you dispatched. Do not end
+the turn without calling it.
+When a dispatched task is still running, stay in this turn. Use
+`send_agent_task` and `wait_agent_task`.
 """
 
 
@@ -42,7 +52,10 @@ def load_system_prompt(agent: AgentConfig, campaign: CampaignConfig) -> str:
         source = agent.prompt.guidance_variant
     prompt = _import_attr(source)
     prompt = prompt.replace("`exit` tool", "`finish_task` tool").replace("exit tool", "finish_task tool")
-    prompt += COMPLETION_DIRECTIVE
+    if agent.role == campaign.manager_role:
+        prompt += MANAGER_COMPLETION_DIRECTIVE
+    else:
+        prompt += COMPLETION_DIRECTIVE
     if agent.prompt.response_format:
         prompt += _import_attr("src.planning.prompt:RESPONSE_FORMAT_PROMPT")
     return prompt
