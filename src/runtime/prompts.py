@@ -18,18 +18,26 @@ RESPONSE_FORMAT_ATTR = "RESPONSE_FORMAT_PROMPT"
 COMPLETION_DIRECTIVE = """
 
 # Task completion (mandatory)
-When your task is complete, you MUST call the MCP tool `finish_task` and pass a
-concise `exit_reason` describing what you did and the evidence (files, commands,
-results). Do not end your turn without calling it. If `finish_task` returns a
-reminder, fix the problem and call it again.
+When your task is complete, you MUST call the MCP tool `finish_task` with
+`status="done"` and pass a concise `exit_reason` describing what you did and the
+evidence (files, commands, results). If `finish_task` returns a reminder, fix the
+problem and call it again.
+If you cannot complete the task - missing input, a decision only the manager can
+make, a request that conflicts with your role, or a failed prerequisite - call
+`finish_task(status="blocked", exit_reason=<exactly what you need>)`. If the work
+failed, use `status="failed"`. Never end your turn without calling `finish_task`.
 """
 
 MANAGER_COMPLETION_DIRECTIVE = """
 
 # Task completion
-When this round is complete, call the MCP tool `finish_task` and pass a concise
-`exit_reason` describing what you observed and what you dispatched. Do not end
-the turn without calling it.
+When this round is complete, call the MCP tool `finish_task` with
+`status="done"` and a concise `exit_reason` describing what you observed and
+what you dispatched. If you cannot make progress (a child task is blocked,
+nothing changed for several rounds, or you need a decision), call
+`finish_task(status="blocked", exit_reason=<exactly what you need>)` so the
+controller can stop or wait instead of looping. Never end the turn without
+calling `finish_task`.
 When a dispatched task is still running, stay in this turn. Use
 `send_agent_task` and `wait_agent_task`.
 """

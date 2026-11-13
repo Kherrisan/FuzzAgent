@@ -36,3 +36,10 @@ hc:
 resume:
   mode: auto
   brief_tasks: 10
+
+# When a manager round ends with status=blocked, wait this long before the
+# next round, and stop the campaign after this many blocked rounds in a row
+# (0 = never stop).
+blocked_backoff_seconds: 30
+max_blocked_rounds: 3
+

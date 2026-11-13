@@ -95,13 +95,19 @@ class ToolRuntime:
             guards.pre_task(self.guard)
         return self.guard
 
-    def mark_finish(self, report: str, forced: bool, allowed: bool) -> None:
+    def mark_finish(self, report: str, forced: bool, allowed: bool, status: str = "done") -> None:
         with _task_lock(self.task_id):
             self.task_dir.mkdir(parents=True, exist_ok=True)
             (self.task_dir / "report.md").write_text(report, encoding="utf-8")
             (self.task_dir / "finish_task.json").write_text(
                 json.dumps(
-                    {"report": report, "forced": forced, "allowed": allowed, "at": time.time()},
+                    {
+                        "status": status,
+                        "report": report,
+                        "forced": forced,
+                        "allowed": allowed,
+                        "at": time.time(),
+                    },
                     ensure_ascii=False,
                     indent=2,
                 ),
@@ -137,11 +143,23 @@ class ToolRuntime:
         with _task_lock(self.task_id):
             forced = bool(arguments.get("force", False))
             report = str(arguments.get("exit_reason", ""))
+            status = str(arguments.get("status") or "done").strip().lower()
+            if status not in {"done", "blocked", "failed"}:
+                return _text_result(
+                    f"Invalid status {status!r}; use done, blocked or failed.", is_error=True
+                )
             self.record_call("finish_task", arguments)
             ctx = self.guard_context()
+            if status in {"blocked", "failed"}:
+                # Guards only gate claims of completion; a blocked or failed task
+                # has nothing to gate and must not be rejected into a dead loop.
+                self.mark_finish(report, forced=forced, allowed=True, status=status)
+                return _text_result(
+                    f"Finish accepted ({status}). The task is closed; do not call more tools.\n" + report
+                )
             if forced:
                 final = guards.post_report(ctx, report)
-                self.mark_finish(final, forced=True, allowed=True)
+                self.mark_finish(final, forced=True, allowed=True, status="done")
                 return _text_result(
                     "Finish accepted (forced). The task is complete; do not call more tools.\n" + final
                 )
@@ -151,7 +169,7 @@ class ToolRuntime:
                     "Finish rejected. Fix the issue, then call finish_task again.\n" + (reminder or "")
                 )
             final = guards.post_report(ctx, report)
-            self.mark_finish(final, forced=False, allowed=True)
+            self.mark_finish(final, forced=False, allowed=True, status="done")
             return _text_result("Finish accepted. The task is complete; do not call more tools.\n" + final)
 
     def _run_script(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:

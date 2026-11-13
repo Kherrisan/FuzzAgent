@@ -22,13 +22,22 @@ tools:
         description: The detailed description of the task to send to the agent.
         required: true
   finish_task:
-    signature: finish_task <exit_reason> <force>
-    docstring: Finish the task. You can only finish the task when you are sure it is done.
+    signature: finish_task <exit_reason> [status] [force]
+    docstring: |
+      Finish the task. status=done when the task is complete (the guards apply); status=blocked when you
+      cannot proceed and need a decision, missing input, or the task conflicts with your role - report exactly
+      what you need; status=failed when the work failed (guards are skipped for blocked/failed).
+      Always call this before ending your turn.
     arguments:
       - name: exit_reason
         type: string
         description: The reason to finish the task. Report the task status before finishing.
         required: true
+      - name: status
+        type: string
+        description: Task outcome. done = completed, blocked = cannot proceed without a decision/input, failed = the work failed.
+        required: false
+        enum: ["done", "blocked", "failed"]
       - name: force
         type: boolean
         description: Finish even if the guards would reject it. Use this only for a fatal error that cannot be fixed in the current task.

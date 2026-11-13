@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ class FakeHC:
         self.launched: list[list[str]] = []
         self.launch_labels: list[dict[str, str]] = []
         self.killed: list[str] = []
+        self.interrupted: list[str] = []
+        self.read_text = "fake screen"
 
     def get(self, name: str):
         return self.terminals.get(name)
@@ -47,7 +50,11 @@ class FakeHC:
         return self.terminals[name]
 
     def read(self, name, lines=200):
-        return "fake screen"
+        return self.read_text
+
+    def interrupt(self, name, timeout=10):
+        self.interrupted.append(name)
+        return {}
 
     def remove(self, name):
         self.terminals.pop(name, None)
@@ -60,11 +67,16 @@ class FakeHC:
 
 
 class OrchestratorStub(Orchestrator):
-    def collect_report(self, directory: Path, agent):
+    def collect_result(self, directory: Path, agent, terminal=None, name=None):
+        if terminal is not None and (
+            terminal.is_blocked or terminal.state_word == "error" or not terminal.is_live
+        ):
+            return super().collect_result(directory, agent, terminal=terminal, name=name)
         (directory / "finish_task.json").write_text(
-            json.dumps({"report": f"finished {agent.role}", "allowed": True}), encoding="utf-8"
+            json.dumps({"status": "done", "report": f"finished {agent.role}", "allowed": True}),
+            encoding="utf-8",
         )
-        return f"finished {agent.role}"
+        return "done", f"finished {agent.role}"
 
 
 @pytest.fixture()
@@ -161,7 +173,7 @@ def test_blocked_terminal_is_reported(orchestrator):
         result = orch.dispatch("HarnessAgent", "do it")
     finally:
         fake.wait_turn = original  # type: ignore[assignment]
-    assert "blocked waiting for a person" in result
+    assert "status blocked" in result
     assert "Trust this folder?" in result
 
 
@@ -204,8 +216,117 @@ def test_poll_task_reads_finish_file(orchestrator, campaign):
     directory.mkdir(parents=True)
     assert orch.poll_task(task_id) == f"Task {task_id} is not finished."
     (directory / "finish_task.json").write_text(
-        json.dumps({"report": "built the library"}), encoding="utf-8"
+        json.dumps({"status": "done", "report": "built the library"}), encoding="utf-8"
     )
     text = orch.poll_task(task_id)
     assert text.startswith("built the library\n")
     assert "current states of the fuzzing tasks" in text
+
+
+def _terminal(fake, state="idle", turn=1):
+    terminal = Terminal(
+        address="t1", name="harnessagent", state="live",
+        status={"state": state}, reported=True, turn=turn,
+    )
+    fake.terminals["harnessagent"] = terminal
+    return terminal
+
+
+def _running_task(campaign, task_id, **meta_updates):
+    directory = Path(campaign.output) / ".campaign" / "tasks" / task_id
+    directory.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "task_id": task_id,
+        "role": "HarnessAgent",
+        "status": "running",
+        "started": time.time(),
+        "terminal": "t1",
+        "terminal_name": "harnessagent",
+        "started_turn": 0,
+    }
+    meta.update(meta_updates)
+    (directory / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    return directory
+
+
+def test_poll_task_detects_turn_end_without_finish(orchestrator, campaign):
+    orch, fake = orchestrator
+    task_id = "HarnessAgent-10"
+    directory = _running_task(campaign, task_id)
+    _terminal(fake, "idle", 1)
+    fake.read_text = "  Reasoning: cannot run two fuzzers\n  Action: Choose target 000 or 001"
+
+    text = orch.poll_task(task_id)
+    assert "is blocked" in text
+    assert "Choose target 000 or 001" in text
+    meta = json.loads((directory / "meta.json").read_text())
+    assert meta["status"] == "blocked"
+    assert meta["detected_by"] == "poll_task"
+    # not a fake completion: no finish_task.json
+    assert not (directory / "finish_task.json").exists()
+
+
+def test_poll_task_keeps_running_while_working(orchestrator, campaign):
+    orch, fake = orchestrator
+    task_id = "HarnessAgent-11"
+    _running_task(campaign, task_id)
+    _terminal(fake, "working", 0)
+    assert orch.poll_task(task_id) == f"Task {task_id} is not finished."
+
+
+def test_poll_task_marks_failed_when_screen_shows_error(orchestrator, campaign):
+    orch, fake = orchestrator
+    task_id = "HarnessAgent-12"
+    directory = _running_task(campaign, task_id)
+    _terminal(fake, "idle", 1)
+    fake.read_text = "Traceback ...\nModuleNotFoundError: No module named 'yaml'"
+    text = orch.poll_task(task_id)
+    assert "is failed" in text
+    assert json.loads((directory / "meta.json").read_text())["status"] == "failed"
+
+
+def test_poll_task_marks_failed_when_terminal_finished(orchestrator, campaign):
+    orch, fake = orchestrator
+    task_id = "HarnessAgent-13"
+    _running_task(campaign, task_id)
+    terminal = _terminal(fake, "idle", 1)
+    terminal.state = "finished"
+    terminal.exit_code = 1
+    text = orch.poll_task(task_id)
+    assert "is failed" in text
+
+
+def test_poll_task_prefers_blocked_finish_file(orchestrator, campaign):
+    orch, _ = orchestrator
+    task_id = "HarnessAgent-14"
+    directory = _running_task(campaign, task_id)
+    (directory / "finish_task.json").write_text(
+        json.dumps({"status": "blocked", "report": "need a harness id"}), encoding="utf-8"
+    )
+    text = orch.poll_task(task_id)
+    assert "is blocked" in text
+    assert "need a harness id" in text
+
+
+def test_poll_task_is_idempotent(orchestrator, campaign):
+    orch, fake = orchestrator
+    task_id = "HarnessAgent-15"
+    _running_task(campaign, task_id)
+    _terminal(fake, "idle", 1)
+    first = orch.poll_task(task_id)
+    second = orch.poll_task(task_id)
+    assert first == second
+    journal = (Path(campaign.output) / ".campaign" / "journal.jsonl").read_text().splitlines()
+    finished = [line for line in journal if json.loads(line).get("event") == "finished"
+                and json.loads(line).get("detected_by") == "poll_task"]
+    assert len(finished) == 1
+
+
+def test_poll_task_interrupts_stuck_task(orchestrator, campaign):
+    orch, fake = orchestrator
+    task_id = "HarnessAgent-16"
+    _running_task(campaign, task_id, started=time.time() - 8000)
+    _terminal(fake, "working", 0)
+    text = orch.poll_task(task_id)
+    assert "interrupted" in text
+    assert fake.interrupted == ["harnessagent"]

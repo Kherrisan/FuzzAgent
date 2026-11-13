@@ -92,6 +92,9 @@ class SessionSpec:
 class DispatchSpec:
     block_seconds: int = 0
     poll_seconds: int = 30
+    # A dispatched task still working after this many seconds is considered
+    # stuck: poll_task interrupts it and marks it failed. 0 = derive 7200.
+    stuck_seconds: int = 0
 
 
 @dataclass
@@ -161,6 +164,10 @@ class CampaignConfig:
     round_prompt_file: str | None = None
     base_dir: str | None = None
     auth_config: str | None = "config/agent_auth.toml"
+    # Controller behaviour when a manager round reports "blocked": wait a bit
+    # instead of re-prompting immediately, and stop after N consecutive ones.
+    blocked_backoff_seconds: float = 30.0
+    max_blocked_rounds: int = 3
 
     @property
     def campaign_dir(self) -> Path:

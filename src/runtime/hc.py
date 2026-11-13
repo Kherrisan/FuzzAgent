@@ -223,6 +223,12 @@ class HC:
     def keys(self, name: str, *keys: str) -> dict[str, Any]:
         return self._invoke(["keys", name, *keys], timeout=60)
 
+    def interrupt(self, name: str, timeout: int = 10) -> dict[str, Any]:
+        """Press the program's stop key and report what happened."""
+        return self._invoke(
+            ["interrupt", name, "--json", "--timeout", str(timeout)], timeout=timeout + 30
+        )
+
     def kill(self, name: str) -> None:
         try:
             self._invoke(["kill", name], timeout=30)

@@ -160,6 +160,36 @@ ids, guidance count vs harness count, crash report completeness.
 interrupt/rollback; `tasks/<id>/{task.md,tools.jsonl,report.md,meta.json}`
 keeps everything a guard or a human needs after a crash.
 
+
+## Task outcomes (done / blocked / failed)
+
+`finish_task` takes an optional `status`:
+
+| status | when | guards | effect |
+|---|---|---|---|
+| `done` (default) | task completed | enforced (`check_exit`, `force` bypass) | round/task closes as done |
+| `blocked` | missing input, a decision, or the task conflicts with the role | skipped | task closes as blocked, the `exit_reason` is the question for the manager |
+| `failed` | the work failed (compiler missing, tool error, …) | skipped | task closes as failed |
+
+`wait_agent_task` (backed by `Orchestrator.poll_task`) no longer only waits for
+`finish_task.json`:
+
+| child terminal | no finish file | result |
+|---|---|---|
+| `working`, turn unchanged | — | `Task … is not finished.` |
+| `working` longer than `dispatch.stuck_seconds` (default 7200) | — | `hc interrupt` + failed |
+| `idle`/`done`, `turn > started_turn` | yes | **blocked** (or failed when the screen shows an error), with the agent's last message |
+| `blocked` | — | blocked + `status.msg` |
+| terminal gone / `finished` / `error` | — | failed |
+
+A task closed this way writes `meta.json` (`status`, `report`, `detected_by:
+poll_task`) and a `finished` journal event; it never fabricates a
+`finish_task.json`.
+
+The controller reacts to `round_blocked` events: it sleeps
+`blocked_backoff_seconds` (default 30) before the next round and stops after
+`max_blocked_rounds` consecutive blocked rounds (default 3, 0 = never).
+
 ## Verification
 
 ```bash

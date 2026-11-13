@@ -285,3 +285,32 @@ def test_main_passes_current_task_into_toolruntime(tmp_path: Path, monkeypatch):
     assert "finish_task" in runtime.tools
     built = build_runtime("BuilderAgent", "BuilderAgent-7", runtime.dispatcher, paths=runtime.paths)
     assert built.task_id == "BuilderAgent-7"
+
+
+def test_finish_task_blocked_bypasses_guards(runtime: ToolRuntime):
+    result = call_tool(runtime, "finish_task", {"exit_reason": "need a harness id", "status": "blocked"})
+    assert result["isError"] is False
+    assert "Finish accepted (blocked)" in result["content"][0]["text"]
+    payload = json.loads((runtime.task_dir / "finish_task.json").read_text())
+    assert payload["status"] == "blocked"
+    assert payload["report"] == "need a harness id"
+
+
+def test_finish_task_failed_bypasses_guards(runtime: ToolRuntime):
+    result = call_tool(runtime, "finish_task", {"exit_reason": "compiler missing", "status": "failed"})
+    assert result["isError"] is False
+    assert "Finish accepted (failed)" in result["content"][0]["text"]
+    assert json.loads((runtime.task_dir / "finish_task.json").read_text())["status"] == "failed"
+
+
+def test_finish_task_rejects_unknown_status(runtime: ToolRuntime):
+    result = call_tool(runtime, "finish_task", {"exit_reason": "x", "status": "nope"})
+    assert result["isError"] is True
+    assert "Invalid status" in result["content"][0]["text"]
+    assert not (runtime.task_dir / "finish_task.json").exists()
+
+
+def test_finish_task_done_is_still_guarded(runtime: ToolRuntime):
+    result = call_tool(runtime, "finish_task", {"exit_reason": "done"})
+    assert "Finish rejected" in result["content"][0]["text"]
+    assert not (runtime.task_dir / "finish_task.json").exists()

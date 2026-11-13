@@ -23,6 +23,11 @@ from .orchestrator import Orchestrator
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _report_is_blocked(report: str) -> bool:
+    head = report[:160].lower()
+    return "status blocked" in head or " is blocked:" in head
+
+
 def _own_output_as_root(output: Path) -> None:
     """Make the campaign output directory owned by uid 0.
 
@@ -116,6 +121,7 @@ class CampaignController:
         signal.signal(signal.SIGINT, _stop)
         try:
             round_index = 0
+            blocked_streak = 0
             while not self.stop_requested:
                 round_index += 1
                 if limit and round_index > limit:
@@ -138,8 +144,34 @@ class CampaignController:
                 if "campaign-complete" in report.lower():
                     self.orchestrator.journal({"event": "campaign_complete"})
                     break
+
+                if _report_is_blocked(report):
+                    blocked_streak += 1
+                    self.orchestrator.journal(
+                        {
+                            "event": "round_blocked",
+                            "round": round_index,
+                            "streak": blocked_streak,
+                            "report": report[:300],
+                        }
+                    )
+                    max_blocked = int(self.campaign.max_blocked_rounds or 0)
+                    if max_blocked and blocked_streak >= max_blocked:
+                        self.orchestrator.journal(
+                            {"event": "campaign_blocked", "round": round_index}
+                        )
+                        break
+                    self._sleep(self.campaign.blocked_backoff_seconds)
+                else:
+                    blocked_streak = 0
         finally:
             signal.signal(signal.SIGTERM, previous)
+
+    def _sleep(self, seconds: float) -> None:
+        """Sleep, but stay responsive to a stop request."""
+        deadline = time.time() + max(0.0, float(seconds or 0.0))
+        while not self.stop_requested and time.time() < deadline:
+            time.sleep(min(1.0, deadline - time.time()))
 
     # --- operator commands ------------------------------------------------
     def status(self) -> dict[str, Any]:
