@@ -30,16 +30,18 @@ failed, use `status="failed"`. Never end your turn without calling `finish_task`
 
 MANAGER_COMPLETION_DIRECTIVE = """
 
-# Task completion
-When this round is complete, call the MCP tool `finish_task` with
-`status="done"` and a concise `exit_reason` describing what you observed and
-what you dispatched. If you cannot make progress (a child task is blocked,
-nothing changed for several rounds, or you need a decision), call
-`finish_task(status="blocked", exit_reason=<exactly what you need>)` so the
-controller can stop or wait instead of looping. Never end the turn without
-calling `finish_task`.
-When a dispatched task is still running, stay in this turn. Use
-`send_agent_task` and `wait_agent_task`.
+# Every round
+End every round with `finish_task`; never end a turn without it.
+- `status="done"`: one line on what you observed and dispatched.
+- `status="blocked"`: only when you truly cannot progress - a child reports
+  `blocked`, you need a decision, or nothing changed across several checks
+  (same `observe_agent_states` status/turn AND same `observe_current_states`
+  plus `screen_command` output).
+
+A child whose status is `working` is still progressing, even if artifacts look
+unchanged: never call blocked while any dispatched agent is working. While one
+runs, stay in this turn and check it with `observe_agent_states` /
+`wait_agent_task` before deciding anything else.
 """
 
 
