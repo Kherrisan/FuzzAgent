@@ -13,7 +13,6 @@ REPO_ROOT = Path(os.environ.get("FUZZAGENT_HOME") or "/root/FuzzAgent")
 if not (REPO_ROOT / "src").is_dir():
     REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
-os.environ.setdefault("FUZZAGENT_SKIP_ENV_INIT", "1")
 
 from src.runtime.campaign import CampaignController  # noqa: E402
 try:  # the controller may not re-export load()
@@ -42,7 +41,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "up":
         controller.run(max_rounds=args.rounds, resume=args.resume)
-        return 0
+        # A failed provisioning script stops the campaign before round 1.
+        return 3 if controller.setup_failed else 0
     if args.command == "prepare":
         controller.prepare()
         return 0

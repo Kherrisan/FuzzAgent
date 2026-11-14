@@ -24,10 +24,17 @@ tools:
   finish_task:
     signature: finish_task <exit_reason> [status] [force]
     docstring: |
-      Finish the task. status=done when the task is complete (the guards apply); status=blocked when you
-      cannot proceed and need a decision, missing input, or the task conflicts with your role - report exactly
-      what you need; status=failed when the work failed (guards are skipped for blocked/failed).
-      Always call this before ending your turn.
+      Finish the task before ending your turn. exit_reason names the condition and the task ids.
+      status=done: every dispatched sub-agent task has finished successfully, none is blocked or failed,
+      and this manager task is finished. Guards apply.
+      status=failed: any dispatched sub-agent task finished as failed, or this task failed and there is
+      no basis to treat the result as correct. Guards are skipped.
+      status=blocked: any dispatched sub-agent task finished as blocked, or this task is blocked and
+      there is no basis to treat the result as correct or to continue, or you need a decision, or
+      several checks show no change. One check is one observe_agent_states call and one
+      observe_current_states call. No change means every agent's status and turn, and the artifact
+      status, match the previous check. Guards are skipped.
+      An agent that dispatched no sub-agents applies these statuses to its own task only.
     arguments:
       - name: exit_reason
         type: string
@@ -35,7 +42,7 @@ tools:
         required: true
       - name: status
         type: string
-        description: Task outcome. done = completed, blocked = cannot proceed without a decision/input, failed = the work failed.
+        description: done = every sub-agent finished successfully and this task is finished; failed = a sub-agent failed, or this task failed with no basis to treat the result as correct; blocked = a sub-agent blocked, or this task is blocked with no basis to treat the result as correct or to continue, or a decision is needed, or several observe_agent_states and observe_current_states checks show no change.
         required: false
         enum: ["done", "blocked", "failed"]
       - name: force

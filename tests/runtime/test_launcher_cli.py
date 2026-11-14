@@ -63,7 +63,7 @@ def test_cli_defaults_and_resume_ignore_host_environment(launcher):
 def test_cli_options_and_validation(launcher):
     root, run = launcher
     result = run("launch", root / "source", "--output", "results with spaces",
-                 "--duration", "10m", "--engine", "legacy", "--model", "model",
+                 "--duration", "10m", "--engine", "hc", "--model", "model",
                  "--api-key", "key", "--api-base-url", "https://llm.invalid/v1",
                  "--auth-dir", "auth", "--http-proxy", "http://proxy.invalid")
     assert result.returncode == 0, result.stderr

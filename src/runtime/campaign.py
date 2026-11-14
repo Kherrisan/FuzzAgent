@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import signal
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -49,12 +50,97 @@ class CampaignController:
         self.paths = artifacts.ProjectPaths(
             Path(campaign.src), Path(campaign.output), Path(campaign.output) / ".campaign"
         )
-        os.environ.setdefault("FUZZAGENT_SKIP_ENV_INIT", "1")
         self.agents = load_agents(
             campaign.agents_dir, {"OUTPUT": campaign.output, "SRC": campaign.src}
         )
         self.orchestrator = Orchestrator(campaign, self.agents, hc=self.hc)
         self.stop_requested = False
+        # Set when the provisioning script failed; the campaign must not run.
+        self.setup_failed = False
+
+    # --- provisioning -----------------------------------------------------
+    def run_setup(self) -> bool:
+        """Run the campaign's provisioning script once, before any agent starts.
+
+        The script installs the external libraries and build tools the target
+        needs (gperf, bison, gtk-doc, ...). Returns ``False`` when the script is
+        missing or exits non-zero: the campaign must not start in that case.
+        """
+        script = self.campaign.setup_script
+        if not script:
+            return True
+
+        path = Path(script)
+        base = str(self.campaign.base_dir or REPO_ROOT)
+        if not path.is_absolute():
+            path = Path(base) / path
+        log_dir = self.orchestrator.campaign_dir / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"setup-{int(time.time())}.log"
+
+        if not path.is_file():
+            # The campaign profile may point at a per-target provisioner
+            # (config/setup/${REPO_BASE_NAME}.sh). Targets without one have
+            # nothing to install, so this is a skip rather than a failure.
+            self.orchestrator.journal(
+                {
+                    "event": "setup_skipped",
+                    "script": str(path),
+                    "reason": "script not found; nothing to provision",
+                }
+            )
+            return True
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "SRC": str(self.campaign.src),
+                "OUTPUT": str(self.campaign.output),
+                "CAMPAIGN_DIR": str(self.orchestrator.campaign_dir),
+                "REPO_ROOT": base,
+                "SETUP_SCRIPT": str(path),
+                "DEBIAN_FRONTEND": "noninteractive",
+            }
+        )
+        timeout = float(self.campaign.setup_timeout_seconds or 0) or None
+        self.orchestrator.journal(
+            {"event": "setup_started", "script": str(path), "log": str(log_path)}
+        )
+
+        started = time.time()
+        detail: dict[str, Any] = {}
+        ok = False
+        try:
+            with log_path.open("w", encoding="utf-8") as handle:
+                proc = subprocess.run(
+                    ["bash", str(path)],
+                    cwd=base,
+                    env=env,
+                    # campaignctl owns the container's controlling terminal, and
+                    # apt/dpkg stop themselves (SIGTTIN/SIGTTOU) as soon as they
+                    # touch /dev/tty. Detach the provisioner from that terminal:
+                    # its own session, no inherited stdin, output to the log.
+                    stdin=subprocess.DEVNULL,
+                    stdout=handle,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    timeout=timeout,
+                )
+            ok = proc.returncode == 0
+            detail["returncode"] = proc.returncode
+        except subprocess.TimeoutExpired:
+            detail["returncode"] = None
+            detail["timeout_seconds"] = timeout
+        except OSError as exc:  # pragma: no cover - spawn failure is unusual
+            detail["returncode"] = None
+            detail["error"] = str(exc)
+        detail["seconds"] = round(time.time() - started, 1)
+
+        event = "setup_finished" if ok else "setup_failed"
+        self.orchestrator.journal(
+            {"event": event, "script": str(path), "log": str(log_path), **detail}
+        )
+        return ok
 
     # --- preparation ------------------------------------------------------
     def prepare(self) -> None:
@@ -64,10 +150,14 @@ class CampaignController:
             "coverage_guidance", "crash_reports", ".cache",
         ):
             (root / directory).mkdir(parents=True, exist_ok=True)
+        # The SanCov build links this standalone driver (it supplies main() for
+        # harnesses, which only export LLVMFuzzerTestOneInput). copy_and_check
+        # _harness refuses to run without it, so it must exist before round 1.
+        wrapper = Path(self.campaign.base_dir or ".") / "src" / "utils" / "fuzz_wrapper.cpp"
+        if wrapper.is_file():
+            shutil.copy(wrapper, root / ".cache" / "fuzz_wrapper.cpp")
         # Install the tool scripts (observe_current_states, project_utils, ...)
         # so agent MCP tools find them on PATH.
-        import subprocess
-
         script = Path(self.campaign.base_dir or ".") / "src" / "tools" / "copy_tools.sh"
         if script.exists():
             subprocess.run(["bash", str(script)], check=False)
@@ -105,7 +195,17 @@ class CampaignController:
             base = self.orchestrator.resume_brief() + "\n\n" + base
         return f"[round {round_index}]\n{base}"
 
-    def run(self, max_rounds: int | None = None, resume: bool = False) -> None:
+    def run(self, max_rounds: int | None = None, resume: bool = False) -> bool:
+        """Run the round loop. Returns False when provisioning failed."""
+        if not self.run_setup():
+            self.setup_failed = True
+            self.orchestrator.journal(
+                {
+                    "event": "campaign_setup_failed",
+                    "script": str(self.campaign.setup_script),
+                }
+            )
+            return False
         self.prepare()
         manager = self.agents[self.campaign.manager_role]
         limit = max_rounds if max_rounds is not None else int(self.campaign.max_rounds or 0)
@@ -166,6 +266,7 @@ class CampaignController:
                     blocked_streak = 0
         finally:
             signal.signal(signal.SIGTERM, previous)
+        return True
 
     def _sleep(self, seconds: float) -> None:
         """Sleep, but stay responsive to a stop request."""

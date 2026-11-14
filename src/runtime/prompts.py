@@ -15,6 +15,27 @@ from .config import AgentConfig, CampaignConfig
 
 RESPONSE_FORMAT_ATTR = "RESPONSE_FORMAT_PROMPT"
 
+RESPONSE_FORMAT_PROMPT = """
+# Response Format
+Your response must follow the following format:
+- **Reasoning**: Reasoning about the feedback from the system (should be concise).
+- **Thought**: Provide the strategy to achieve the goal (should be concise).
+- **Action**: What you want to do next. (should be concise)
+
+--- BEGIN OF EXAMPLE ---
+**Reasoning**: The last function call get the location of source code directory.
+**Thought**: First, I will check source directory contents.
+**Action**: I will use my shell to check the source directory contents.
+--- END OF EXAMPLE ---
+"""
+
+AGENT_DESCRIPTION_PROMPT = """
+# Agent Team Members
+You are the manager of the agent team. You can coordinate the agent team to achieve your goal. The following is the description of the agent team members:
+{AGENTS}
+"""
+
+
 COMPLETION_DIRECTIVE = """
 
 # Task completion (mandatory)
@@ -28,20 +49,28 @@ make, a request that conflicts with your role, or a failed prerequisite - call
 failed, use `status="failed"`. Never end your turn without calling `finish_task`.
 """
 
+WORKSPACE_DIRECTIVE = """
+
+# Output directory hygiene
+`$OUTPUT` has a fixed layout shared by every tool: `build/`, `harnesses/`,
+`fuzzers/`, `dictionary/`, `seeds/`, `coverage_guidance/`, `crash_reports/`,
+`.cache/`. Never create new entries at its root. Put temporary or scratch
+material (package indexes, install prefixes, unpacked tarballs, logs) under
+`$OUTPUT/.cache/<name>` and clean it up when the task is done.
+"""
+
 MANAGER_COMPLETION_DIRECTIVE = """
 
 # Every round
-End every round with `finish_task`; never end a turn without it. `exit_reason`
-must name the condition and the task ids it refers to.
-- `status="done"`: every sub-agent task dispatched in this campaign has finished,
-  and none failed or blocked.
-- `status="blocked"`: anything less - a finished task failed or blocked, a
-  decision you need, or several checks with no change.
-
-Never call `finish_task` - neither `done` nor `blocked` - while any dispatched
-agent is working: stay in this turn and re-check with `observe_agent_states` /
-`wait_agent_task` until it stops or exits. Check `observe_agent_states`
-(status/turn) and `observe_current_states` before deciding.
+Before `finish_task`, call `observe_agent_states` to identify the progress each
+agent made: its `status` and `turn`. If any agent still has progress, is
+`working`, or shows no progress only because it is running a long task and
+several checks are unchanged, keep waiting. Do not call `finish_task`.
+Call `observe_current_states` to see whether the artifacts changed. If they
+changed, do not call `finish_task`.
+Stay in this turn and poll with `observe_agent_states` and `wait_agent_task`
+until that agent stops or exits. Then end the round with `finish_task` and a
+`status` of `done`, `failed`, or `blocked`, as that tool describes.
 """
 
 
@@ -62,12 +91,13 @@ def load_system_prompt(agent: AgentConfig, campaign: CampaignConfig) -> str:
         source = agent.prompt.guidance_variant
     prompt = _import_attr(source)
     prompt = prompt.replace("`exit` tool", "`finish_task` tool").replace("exit tool", "finish_task tool")
+    prompt += WORKSPACE_DIRECTIVE
     if agent.role == campaign.manager_role:
         prompt += MANAGER_COMPLETION_DIRECTIVE
     else:
         prompt += COMPLETION_DIRECTIVE
     if agent.prompt.response_format:
-        prompt += _import_attr("src.planning.prompt:RESPONSE_FORMAT_PROMPT")
+        prompt += RESPONSE_FORMAT_PROMPT
     return prompt
 
 
@@ -97,8 +127,6 @@ def render_card_description(card_path: str | Path) -> str:
 
 
 def roster_prompt(campaign: CampaignConfig, agents: dict[str, AgentConfig]) -> str:
-    from .prompts import _import_attr as _attr
-
     parts = []
     for role, agent in agents.items():
         if role == campaign.manager_role or not agent.card:
@@ -108,7 +136,7 @@ def roster_prompt(campaign: CampaignConfig, agents: dict[str, AgentConfig]) -> s
             path = Path(campaign.base_dir or ".") / path
         if path.exists():
             parts.append(render_card_description(path))
-    template = _attr("src.planning.prompt:AGENET_DESCRIPTION_PROMPT")
+    template = AGENT_DESCRIPTION_PROMPT
     return template.format(AGENTS="\n\n".join(parts)) if parts else ""
 
 

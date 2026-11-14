@@ -21,9 +21,8 @@ from typing import Any
 from . import artifacts, auth, guards, prompts
 from .config import AgentConfig, CampaignConfig
 from .drivers import driver_for
-from .hc import HC, HCError, Terminal
+from .hc import HC, HCError, Terminal, screen_command
 
-os.environ.setdefault("FUZZAGENT_SKIP_ENV_INIT", "1")
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 _FAIL_MARKERS = (
@@ -119,6 +118,76 @@ class Orchestrator:
     # --- terminals --------------------------------------------------------
     def terminal_name(self, agent: AgentConfig) -> str:
         return agent.terminal_name or agent.role.lower()
+
+    def observe_agent_states(self) -> str:
+        """JSON report of every agent's herdr-core terminal and its screen command."""
+        terminals = self.hc.list_all()
+        by_role: dict[str, list[Terminal]] = {}
+        for terminal in terminals:
+            labels = terminal.raw.get("labels") or {}
+            role = labels.get("fuzzagent.role")
+            if role:
+                by_role.setdefault(str(role), []).append(terminal)
+
+        rows: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for role, agent in self.agents.items():
+            expected = self.terminal_name(agent)
+            matches = list(by_role.get(role, []))
+            if not matches:
+                matches = [
+                    terminal
+                    for terminal in terminals
+                    if terminal.name == expected or terminal.address == expected
+                ]
+            if not matches:
+                rows.append(self._agent_state_row(role, expected, None))
+                continue
+            for terminal in matches:
+                seen.add(terminal.address or terminal.name or "")
+                rows.append(self._agent_state_row(role, terminal.name or expected, terminal))
+        for role, group in by_role.items():
+            if role in self.agents:
+                continue
+            for terminal in group:
+                key = terminal.address or terminal.name or ""
+                if key in seen:
+                    continue
+                rows.append(self._agent_state_row(role, terminal.name or role.lower(), terminal))
+        return json.dumps(
+            {"session": getattr(self.hc, "session", None), "agents": rows},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    def _agent_state_row(self, role: str, name: str, terminal: Terminal | None) -> dict[str, Any]:
+        binary = str(getattr(self.hc, "binary", "hc"))
+        env = dict(getattr(self.hc, "env", {}) or {})
+        command = screen_command(binary, name, env)
+        if terminal is None:
+            return {
+                "role": role,
+                "name": name,
+                "launched": False,
+                "state": "absent",
+                "status": "absent",
+                "turn": 0,
+                "screen_command": command,
+            }
+        return {
+            "role": role,
+            "name": terminal.name or name,
+            "address": terminal.address,
+            "launched": True,
+            "state": terminal.state,
+            "status": terminal.state_word,
+            "turn": terminal.turn,
+            "reported": terminal.reported,
+            "exit_code": terminal.exit_code,
+            "blocked_message": terminal.blocked_message,
+            "cwd": terminal.cwd,
+            "screen_command": command,
+        }
 
     def prepare_role(self, agent: AgentConfig) -> tuple[Path, Path]:
         home = Path(agent.home)

@@ -91,7 +91,7 @@ def controller(tmp_path: Path) -> CampaignController:
         src=str(src),
         output=str(out),
         session="fz-cjson",
-        agents_dir=str(Path(__file__).resolve().parents[2] / "config" / "agents"),
+        agents_dir=str(Path(__file__).resolve().parents[2] / "config" / "agents-codex"),
         auth_config=str(toml),
     )
     return CampaignController(campaign, hc=FakeHC())

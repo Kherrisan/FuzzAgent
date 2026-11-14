@@ -60,7 +60,7 @@ docker buildx build -t fuzzagent -f docker/Dockerfile .
 
 For the default hc runtime, collect the installed agent CLIs' credentials with `bin/collect-auth`. The launcher uses `.cache/auth` by default; pass `--auth-dir` to use another bundle. Individual roles and models are configured in `config/agents/`.
 
-For the legacy runtime, supply `--engine legacy --api-key <key> --model <model>` and optionally `--api-base-url <url>`. Use `--github-token <token>` to enable GitHub search. Credentials passed as arguments may be visible in shell history and process listings.
+Use `--github-token <token>` to enable GitHub search. Credentials passed as arguments may be visible in shell history and process listings.
 
 ### 3. Launch a benchmark
 

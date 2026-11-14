@@ -1,9 +1,8 @@
-"""Tool registry: the same YAML that feeds the legacy runtime feeds MCP.
+"""Tool registry: one YAML per tool module feeds the MCP surface.
 
-The legacy code compiled ``src/tools/*/config.yaml`` into OpenAI function
-schemas (``APIToolCall.FunctionCall``).  MCP wants the *same* JSON Schema object
-under ``inputSchema``; keeping one source of truth is what makes the agent
-prompts and tool sets portable.
+``src/tools/*/config.yaml`` is compiled into JSON Schema and published under
+``inputSchema``; keeping one source of truth is what makes the agent prompts and
+tool sets portable.
 """
 
 from __future__ import annotations

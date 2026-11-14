@@ -47,7 +47,8 @@ Options for launch and resume (values follow each option):
   --api-key KEY             API key (default: empty)
   --model MODEL             Legacy runtime model (default: empty)
   --github-token TOKEN      GitHub search token (default: empty)
-  --auth-dir DIR            Host CLI auth bundle (default: .cache/auth in repository)
+  --auth-dir DIR            Host CLI auth bundle (default: .cache/auth in repository).
+                            Refreshed from the host CLIs on every launch and resume.
   --temperature NUMBER      LLM temperature (default: 0.6)
   --top-p NUMBER            LLM top-p (default: 0.9)
   --top-k NUMBER            LLM top-k (default: 20)
@@ -65,7 +66,6 @@ Options for launch and resume (values follow each option):
 
 Options for launch only:
   --output DIR              Output directory (default: output/<target>-YYYYMMDD-HHMM)
-  --engine hc|legacy        Runtime (default: hc)
   --config PATH             Campaign config inside the container (default: config/campaign.yaml)
   --session NAME            hc session (default: fz-<target>)
 EOF
@@ -149,8 +149,8 @@ while [[ $# -gt 0 ]]; do
     esac
     shift 2
 done
-if [[ "$ENGINE_ARG" != hc && "$ENGINE_ARG" != legacy ]]; then
-    printf 'Invalid engine: %s (expected hc or legacy)\n' "$ENGINE_ARG" >&2; exit 2
+if [[ "$ENGINE_ARG" != hc ]]; then
+    printf 'Unsupported engine: %s (only hc is available)\n' "$ENGINE_ARG" >&2; exit 2
 fi
 export http_proxy="$HTTP_PROXY_ARG" HTTP_PROXY="$HTTP_PROXY_ARG" https_proxy="$HTTPS_PROXY_ARG" HTTPS_PROXY="$HTTPS_PROXY_ARG" no_proxy="$NO_PROXY_ARG" NO_PROXY="$NO_PROXY_ARG"
 
@@ -228,11 +228,6 @@ if ! "${docker_cmd[@]}" image inspect fuzzagent >/dev/null 2>&1; then
     exit 1
 fi
 
-if [[ "$ACTION" == launch && "$ENGINE_ARG" == legacy && ( -z "$API_KEY_ARG" || -z "$MODEL_ARG" ) ]]; then
-    printf 'The legacy engine requires --api-key and --model.\n' >&2
-    exit 1
-fi
-
 if [[ "$ACTION" == launch ]]; then
     mkdir -p "$ROOT_DIR/.cache/targets"
     if [[ "$SOURCE_KIND" == local ]]; then
@@ -301,12 +296,16 @@ export FUZZING_DURATION="$DURATION_ARG"
 export COMMAND='bash /root/FuzzAgent/benchmark/run_benchmark.sh'
 export WRITE_MODE=rw
 export FUZZING_ENGINE=afl++
-export FUZZAGENT_AUTO_CLEAN=0
 export FUZZAGENT_DIR="$ROOT_DIR"
 export SRC_DIR="$TARGET_DIR"
 export REPO_BASE_NAME="$TARGET"
 export RAW_OUTPUT_DIR
 export FUZZAGENT_AUTH_DIR="$(realpath -m -- "$AUTH_DIR_ARG")" HOST_AUTH_DIR=/run/fuzzagent-auth
+# Refresh the mounted bundle from ~/.grok, ~/.codex, and the other host CLIs.
+# A missing collector (the launcher unit-test copy) leaves the directory as given.
+if [[ -x "$ROOT_DIR/bin/collect-auth" ]]; then
+    "$ROOT_DIR/bin/collect-auth" "$FUZZAGENT_AUTH_DIR"
+fi
 export OPENAI_BASE_URL="$API_BASE_ARG" OPENAI_API_KEY="$API_KEY_ARG" OPENAI_MODEL="$MODEL_ARG" GITHUB_TOKEN="$GITHUB_ARG"
 export LLM_TEMPERATURE="$TEMPERATURE_ARG" LLM_TOP_P="$TOP_P_ARG" LLM_TOP_K="$TOP_K_ARG" LLM_REPLY_TIMEOUT="$TIMEOUT_ARG"
 export MAX_AGENT_EPOCHS="$EPOCHS_ARG" REMINDER_TOKEN_RATIO="$REMINDER_ARG" MAX_TOKEN_LEN="$MAX_TOKEN_ARG"
@@ -316,9 +315,6 @@ if [[ "$ACTION" == resume ]]; then
     export FUZZAGENT_ENGINE="${saved[2]}" FUZZAGENT_CONFIG="${saved[3]}" HC_SESSION="${saved[4]}"
 else
     export FUZZAGENT_ENGINE="$ENGINE_ARG" FUZZAGENT_CONFIG="$CONFIG_ARG" HC_SESSION="${SESSION_ARG:-fz-$TARGET}"
-    if [[ "$FUZZAGENT_ENGINE" == legacy ]]; then
-        export FUZZAGENT_AUTO_CLEAN=1
-    fi
     python3 - "$RAW_OUTPUT_DIR/.campaign/launcher.json" "$TARGET" "$TARGET_DIR" "$FUZZAGENT_ENGINE" "$FUZZAGENT_CONFIG" "$HC_SESSION" "$CONTAINER_NAME" <<'PY'
 import json, sys
 with open(sys.argv[1], 'w', encoding='utf-8') as f:
@@ -358,7 +354,6 @@ if ! "${docker_cmd[@]}" run -d \
     -v "${mount_output}:/root/FuzzAgent/output/${REPO_BASE_NAME}" \
     -v "${mount_src}:/src/${REPO_BASE_NAME}" \
     -v "${mount_auth}:/run/fuzzagent-auth:ro" \
-    -e "FUZZAGENT_AUTO_CLEAN=${FUZZAGENT_AUTO_CLEAN:-0}" \
     -e "FUZZAGENT_RESUME=${FUZZAGENT_RESUME:-0}" \
     -e "HC_SESSION=${HC_SESSION:-fz-${REPO_BASE_NAME}}" \
     -e "FUZZAGENT_ENGINE=${FUZZAGENT_ENGINE:-hc}" \

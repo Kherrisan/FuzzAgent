@@ -1,7 +1,8 @@
 """Minimal MCP server (stdio, JSON-RPC 2.0, newline framed).
 
 One process per agent is spawned by the coding-agent CLI.  Every tool call
-enters ``ToolRuntime``.  ``send_agent_task`` and ``wait_agent_task`` are
+enters ``ToolRuntime``.  ``send_agent_task``, ``wait_agent_task``, and
+``observe_agent_states`` are
 manager-only and then go through ``dispatcher`` into the orchestrator.
 """
 
@@ -117,7 +118,7 @@ class ToolRuntime:
     def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if name not in self.tools:
             return _text_result(f"Unknown tool: {name}", is_error=True)
-        if name in {"send_agent_task", "wait_agent_task"}:
+        if name in {"send_agent_task", "wait_agent_task", "observe_agent_states"}:
             return self._dispatch_tool(name, arguments)
         if name == "finish_task":
             return self._finish_task(arguments)
@@ -327,6 +328,8 @@ def make_dispatcher(role: str, paths: artifacts.ProjectPaths) -> Dispatcher:
             )
         if tool_name == "wait_agent_task":
             return orchestrator.poll_task(str(arguments.get("task_id", "")))
+        if tool_name == "observe_agent_states":
+            return orchestrator.observe_agent_states()
         raise ValueError(f"dispatcher cannot run {tool_name}")
 
     return forward

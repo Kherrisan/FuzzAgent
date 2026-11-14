@@ -50,7 +50,7 @@ BUILTIN_TOOLS = {
 
 def test_every_role_is_loadable_and_renders(campaign: CampaignConfig):
     registry = load_tools()
-    for folder in ("agents", "agents-grok", "agents-codex"):
+    for folder in ("agents-grok", "agents-codex"):
         agents = load_agents(REPO / "config" / folder, {"OUTPUT": campaign.output, "SRC": campaign.src})
         assert len(agents) == 8, sorted(agents)
         for agent in agents.values():
@@ -67,16 +67,18 @@ def test_every_role_is_loadable_and_renders(campaign: CampaignConfig):
             assert rendered.mcp.server == "fuzzagent-mcp", rendered.role
             if rendered.role == "ManagerAgent":
                 assert "finish_task" in enabled, rendered.role
+                assert "observe_agent_states" in enabled, rendered.role
                 assert "send_agent_task" in enabled
                 assert "wait_agent_task" in enabled
             else:
                 assert "finish_task" in enabled, rendered.role
+                assert "observe_agent_states" not in enabled, rendered.role
                 assert "send_agent_task" not in enabled, rendered.role
                 assert "wait_agent_task" not in enabled, rendered.role
 
 
 def test_manager_prompt_has_no_coverage_variant():
-    agents = load_agents(REPO / "config" / "agents")
+    agents = load_agents(REPO / "config" / "agents-codex")
     manager = agents["ManagerAgent"]
     assert manager.prompt.guidance_variant
     assert manager.prompt.guidance_variant.endswith("NO_COVERAGE_GUIDANCE_SYSTEM_PROMPT")
@@ -108,7 +110,7 @@ def test_campaign_file_roundtrip(campaign: CampaignConfig, tmp_path: Path):
     path = tmp_path / "campaign.yaml"
     path.write_text(
         f"name: cjson\ntarget: cjson\nsrc: {campaign.src}\noutput: {campaign.output}\n"
-        "session: fz-cjson\nengine: hc\nagents_dir: config/agents\n",
+        "session: fz-cjson\nengine: hc\nagents_dir: config/agents-codex\n",
         encoding="utf-8",
     )
     loaded = load_campaign(path)
@@ -119,7 +121,7 @@ def test_campaign_file_roundtrip(campaign: CampaignConfig, tmp_path: Path):
 def test_drivers_still_launch_fuzzagent_mcp_over_stdio(campaign: CampaignConfig, tmp_path: Path):
     from src.runtime.drivers import driver_for
 
-    agent = render_agent(load_agent(REPO / "config" / "agents" / "ManagerAgent.yaml"), campaign)
+    agent = render_agent(load_agent(REPO / "config" / "agents-codex" / "ManagerAgent.yaml"), campaign)
     agent.home = str(tmp_path / "home")
     agent.cwd = str(tmp_path / "work")
     for driver_name in ("codex", "grok", "pi"):
@@ -152,10 +154,96 @@ def test_drivers_still_launch_fuzzagent_mcp_over_stdio(campaign: CampaignConfig,
     assert 'decision = "forbidden"' in rules
     agent.driver = "codex"
     argv = driver_for(agent).launch(agent)
-    assert argv[-2:] == ["-c", "check_for_update_on_startup=false"]
+    assert "check_for_update_on_startup=false" in argv
     grok = (tmp_path / "grok" / ".grok" / "config.toml").read_text(encoding="utf-8")
     assert "fuzzagent-mcp" in grok
     assert 'args = ["--role", "ManagerAgent"]' in grok
     pi = json.loads((tmp_path / "pi" / ".pi" / "agent" / "mcp.json").read_text(encoding="utf-8"))
     assert pi["mcpServers"]["fuzzagent"]["command"].endswith("fuzzagent-mcp")
     assert pi["mcpServers"]["fuzzagent"]["args"] == ["--role", "ManagerAgent"]
+
+
+def test_campaign_setup_script_is_resolved_against_base_dir(tmp_path: Path):
+    src = tmp_path / "src" / "cjson"
+    out = tmp_path / "out" / "cjson"
+    src.mkdir(parents=True)
+    out.mkdir(parents=True)
+    script = tmp_path / "setup.sh"
+    script.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    path = tmp_path / "campaign.yaml"
+    path.write_text(
+        f"name: cjson\ntarget: cjson\nsrc: {src}\noutput: {out}\n"
+        "session: fz-cjson\nengine: hc\nagents_dir: config/agents-codex\n"
+        f"base_dir: {tmp_path}\nsetup_script: setup.sh\n",
+        encoding="utf-8",
+    )
+    loaded = load_campaign(path)
+    assert loaded.setup_script == str(tmp_path / "setup.sh")
+
+
+def test_campaign_setup_script_missing_is_a_config_error(tmp_path: Path):
+    src = tmp_path / "src" / "cjson"
+    out = tmp_path / "out" / "cjson"
+    src.mkdir(parents=True)
+    out.mkdir(parents=True)
+    path = tmp_path / "campaign.yaml"
+    path.write_text(
+        f"name: cjson\ntarget: cjson\nsrc: {src}\noutput: {out}\n"
+        "session: fz-cjson\nengine: hc\nagents_dir: config/agents-codex\n"
+        f"base_dir: {tmp_path}\nsetup_script: missing.sh\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="setup_script not found"):
+        load_campaign(path)
+
+
+def test_campaign_without_setup_script_loads(tmp_path: Path):
+    src = tmp_path / "src" / "cjson"
+    out = tmp_path / "out" / "cjson"
+    src.mkdir(parents=True)
+    out.mkdir(parents=True)
+    path = tmp_path / "campaign.yaml"
+    path.write_text(
+        f"name: cjson\ntarget: cjson\nsrc: {src}\noutput: {out}\n"
+        "session: fz-cjson\nengine: hc\nagents_dir: config/agents-codex\n",
+        encoding="utf-8",
+    )
+    loaded = load_campaign(path)
+    assert loaded.setup_script is None
+
+
+def test_campaign_setup_script_placeholder_is_expanded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    src = tmp_path / "src" / "wolfssl"
+    out = tmp_path / "out" / "wolfssl"
+    src.mkdir(parents=True)
+    out.mkdir(parents=True)
+    script = tmp_path / "wolfssl.sh"
+    script.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    monkeypatch.setenv("REPO_BASE_NAME", "wolfssl")
+    path = tmp_path / "campaign.yaml"
+    path.write_text(
+        f"name: wolfssl\ntarget: wolfssl\nsrc: {src}\noutput: {out}\n"
+        "session: fz-wolfssl\nengine: hc\nagents_dir: config/agents-codex\n"
+        f"base_dir: {tmp_path}\nsetup_script: ${{REPO_BASE_NAME}}.sh\n",
+        encoding="utf-8",
+    )
+    assert load_campaign(path).setup_script == str(script)
+
+
+def test_campaign_setup_script_placeholder_without_env_does_not_fail_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    src = tmp_path / "src" / "wolfssl"
+    out = tmp_path / "out" / "wolfssl"
+    src.mkdir(parents=True)
+    out.mkdir(parents=True)
+    monkeypatch.delenv("REPO_BASE_NAME", raising=False)
+    path = tmp_path / "campaign.yaml"
+    path.write_text(
+        f"name: wolfssl\ntarget: wolfssl\nsrc: {src}\noutput: {out}\n"
+        "session: fz-wolfssl\nengine: hc\nagents_dir: config/agents-codex\n"
+        f"base_dir: {tmp_path}\nsetup_script: ${{REPO_BASE_NAME}}.sh\n",
+        encoding="utf-8",
+    )
+    loaded = load_campaign(path)
+    assert "${REPO_BASE_NAME}" in loaded.setup_script

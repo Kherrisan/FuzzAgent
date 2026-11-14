@@ -158,7 +158,7 @@ class CampaignConfig:
     coverage_guidance: bool = True
     engine: str = "hc"
     manager_role: str = "ManagerAgent"
-    agents_dir: str = "config/agents"
+    agents_dir: str = "config/agents-codex"
     hc: dict[str, Any] = field(default_factory=dict)
     max_rounds: int = 0
     round_prompt_file: str | None = None
@@ -168,18 +168,27 @@ class CampaignConfig:
     # instead of re-prompting immediately, and stop after N consecutive ones.
     blocked_backoff_seconds: float = 30.0
     max_blocked_rounds: int = 3
+    # Provisioning hook: a shell script run once, inside the campaign
+    # container, before any agent starts. It installs the external libraries
+    # and build tools the target needs (gperf, bison, gtk-doc, ...). The
+    # campaign must not start when the script is missing or exits non-zero.
+    setup_script: str | None = None
+    setup_timeout_seconds: float = 3600.0
 
     @property
     def campaign_dir(self) -> Path:
         return Path(self.output) / ".campaign"
 
     def validate(self) -> None:
-        if self.engine not in {"hc", "legacy"}:
-            raise ConfigError("engine must be 'hc' or 'legacy'")
+        if self.engine != "hc":
+            raise ConfigError("engine must be 'hc' (the legacy runtime was removed)")
         if not Path(self.src).exists() or not Path(self.output).exists():
             raise ConfigError(f"src/output must exist: {self.src} / {self.output}")
         if not Path(self.agents_dir).is_dir():
             raise ConfigError(f"agents_dir not found: {self.agents_dir}")
+        if self.setup_script and "${" not in self.setup_script:
+            if not Path(self.setup_script).is_file():
+                raise ConfigError(f"setup_script not found: {self.setup_script}")
 
 
 def _agent_from_dict(data: dict[str, Any], source_path: str | None = None) -> AgentConfig:
@@ -272,8 +281,19 @@ def load_campaign(path: str | Path) -> CampaignConfig:
     if campaign.base_dir is None:
         campaign.base_dir = str(path.parent.parent)
     campaign.agents_dir = _expand(campaign.agents_dir, {"REPO_ROOT": campaign.base_dir})
+    if campaign.setup_script:
+        campaign.setup_script = _resolve_setup_script(campaign.setup_script, campaign.base_dir)
     campaign.validate()
     return campaign
+
+
+def _resolve_setup_script(script: str, base_dir: str | None) -> str:
+    """Expand and anchor the provisioning script path to the campaign root."""
+    expanded = _expand(script, {"REPO_ROOT": base_dir or "."})
+    path = Path(str(expanded)).expanduser()
+    if not path.is_absolute():
+        path = Path(base_dir or ".") / path
+    return str(path)
 
 
 def render_agent(agent: AgentConfig, campaign: CampaignConfig) -> AgentConfig:

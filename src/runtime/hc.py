@@ -89,6 +89,17 @@ def herdr_holder_socket(state_home: str, session: str) -> str:
     )
 
 
+def screen_command(binary: str, name: str, env: dict[str, str], lines: int = 200) -> str:
+    """Shell command that prints one terminal's screen in this hc session."""
+    parts = []
+    for key in ("XDG_STATE_HOME", "HC_SESSION"):
+        value = env.get(key)
+        if value:
+            parts.append(f"{key}={shlex.quote(value)}")
+    parts.append(shlex.join([binary, "read", name, "--lines", str(lines)]))
+    return " ".join(parts)
+
+
 def pin_hc_state_home(env: dict[str, str]) -> None:
     """Keep hc's session socket on a path that fits in ``sun_path``.
 

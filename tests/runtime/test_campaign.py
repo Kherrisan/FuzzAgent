@@ -26,10 +26,10 @@ def controller(tmp_path: Path) -> CampaignController:
         src=str(src),
         output=str(out),
         session="fz-cjson",
-        agents_dir=str(REPO / "config" / "agents"),
+        agents_dir=str(REPO / "config" / "agents-codex"),
         base_dir=str(REPO),
     )
-    campaign.agents_dir = str(REPO / "config" / "agents")
+    campaign.agents_dir = str(REPO / "config" / "agents-codex")
     return CampaignController(campaign, hc=FakeHC())
 
 
@@ -91,3 +91,58 @@ def test_status_reports_artifacts(controller: CampaignController):
     assert status["campaign"] == "cjson"
     assert len(status["agents"]) == 8
     assert status["artifacts"]["harnesses"] == []
+
+
+def test_run_setup_is_a_noop_without_script(controller: CampaignController):
+    assert controller.run_setup() is True
+    assert controller.setup_failed is False
+
+
+def test_run_setup_runs_script_with_campaign_env(controller: CampaignController, tmp_path: Path):
+    script = tmp_path / "setup.sh"
+    script.write_text(
+        'printf "%s\\n%s\\n" "$SRC" "$OUTPUT" > "$OUTPUT/provisioned.txt"\n',
+        encoding="utf-8",
+    )
+    controller.campaign.setup_script = str(script)
+    assert controller.run_setup() is True
+    lines = (Path(controller.campaign.output) / "provisioned.txt").read_text().splitlines()
+    assert lines[0] == controller.campaign.src
+    assert lines[1] == str(Path(controller.campaign.output))
+    journal = (Path(controller.campaign.output) / ".campaign" / "journal.jsonl").read_text()
+    assert '"setup_started"' in journal
+    assert '"setup_finished"' in journal
+
+
+def test_run_setup_failure_is_reported(controller: CampaignController, tmp_path: Path):
+    script = tmp_path / "setup.sh"
+    script.write_text("exit 3\n", encoding="utf-8")
+    controller.campaign.setup_script = str(script)
+    assert controller.run_setup() is False
+    log = sorted((Path(controller.campaign.output) / ".campaign" / "logs").glob("setup-*.log"))
+    assert log and log[0].exists()
+    journal = (Path(controller.campaign.output) / ".campaign" / "journal.jsonl").read_text()
+    assert '"setup_failed"' in journal
+
+
+def test_run_stops_before_round_one_when_setup_fails(controller: CampaignController, tmp_path: Path):
+    script = tmp_path / "setup.sh"
+    script.write_text("exit 1\n", encoding="utf-8")
+    controller.campaign.setup_script = str(script)
+    calls: list[str] = []
+    controller.orchestrator.dispatch = lambda role, task: calls.append(role) or "ok"  # type: ignore[assignment]
+    assert controller.run(max_rounds=2) is False
+    assert calls == []
+    assert controller.setup_failed is True
+    journal = (Path(controller.campaign.output) / ".campaign" / "journal.jsonl").read_text()
+    assert '"campaign_setup_failed"' in journal
+
+
+def test_run_dispatches_after_successful_setup(controller: CampaignController, tmp_path: Path):
+    script = tmp_path / "setup.sh"
+    script.write_text("exit 0\n", encoding="utf-8")
+    controller.campaign.setup_script = str(script)
+    calls: list[str] = []
+    controller.orchestrator.dispatch = lambda role, task: calls.append(role) or "ok"  # type: ignore[assignment]
+    assert controller.run(max_rounds=1) is True
+    assert calls == ["ManagerAgent"]

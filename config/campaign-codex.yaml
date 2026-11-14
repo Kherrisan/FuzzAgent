@@ -43,3 +43,11 @@ resume:
 blocked_backoff_seconds: 30
 max_blocked_rounds: 3
 
+# Provisioning hook, run once inside the container before round 1. The script
+# installs the libraries and build tools the target needs; the campaign starts
+# only when it exits 0, and a non-zero exit stops the container. The path is
+# per target (REPO_BASE_NAME is set by the launcher), so adding a new target
+# only means dropping config/setup/<target>.sh next to these two.
+setup_script: config/setup/${REPO_BASE_NAME}.sh
+setup_timeout_seconds: 3600
+

@@ -27,7 +27,7 @@ from every agent terminal so dsh-tui reports through OSC 7501 like the others.
 
 ```
 config/campaign.yaml           campaign settings (paths, budget, hc session)
-config/agents/<Role>.yaml      one independent config per role
+config/agents-codex/<Role>.yaml  one independent config per role
 src/runtime/config.py          dataclass model + ${VAR} expansion
 src/runtime/registry.py        src/tools/*/config.yaml -> MCP inputSchema
 src/runtime/executor.py        one subprocess per tool call, full log on disk
@@ -44,7 +44,7 @@ $OUTPUT/.campaign/             state, task journal, transcripts, role homes
 
 ## Per-agent configuration
 
-Each `config/agents/<Role>.yaml` is independent: driver, launch argv, model,
+Each `config/agents-codex/<Role>.yaml` is independent: driver, launch argv, model,
 env, isolated `HOME` (so CLI sessions/configs never mix), prompt source, tool
 allowlist, session policy, timeouts and status mode. Paths are
 expanded from `SRC`/`OUTPUT` when the campaign starts.
@@ -77,9 +77,8 @@ Still **outside** the image (by design or not yet done):
 | auth files | `bin/collect-auth` → read-only mount → per-role HOME |
 | target checkouts | host `.cache/targets`, mounted at `/src/<target>` |
 
-`benchmark/run_benchmark.sh` picks the runtime with `FUZZAGENT_ENGINE`:
-`legacy` (default, baked `/opt/fuzzagent-build/.venv/bin/python main.py`, or
-`uv run main.py` as fallback) or `hc` (`campaignctl --config … up --resume`).
+`benchmark/run_benchmark.sh` starts `campaignctl --config … up [--resume]`;
+there is a single runtime (hc).
 
 ## Auth files
 
@@ -193,7 +192,7 @@ The controller reacts to `round_blocked` events: it sleeps
 ## Verification
 
 ```bash
-FUZZAGENT_SKIP_ENV_INIT=1 PYTHONPATH=. .cache/venv/bin/python -m pytest tests/runtime -q
+PYTHONPATH=. .cache/venv/bin/python -m pytest tests/runtime -q
 python3 tools/baseline_report.py output/openssl output/gnutls-24h-20261108 \
         --out-dir tests/fixtures/baseline
 ```
@@ -209,5 +208,8 @@ because the baseline did not record its model settings.
   `doctor`, confirm `reported: true` for all four under hc.
 - P3 shadow run: legacy manager vs hc manager on a short openssl campaign.
 - P4 interruption drills (`kill -9` controller, container restart, host reboot).
-- P5 remove `src/a2a`, `BaseAgent`, the shared ACI pty and the summarizer once
-  the shadow runs pass.
+- ~~P5 remove `src/a2a`, `BaseAgent`, the shared ACI pty and the summarizer once
+  the shadow runs pass.~~ done: the legacy runtime (`main.py`, `src/a2a`,
+  `src/agents/base_agent`, `src/planning`, `src/memory`, `src/utils/{aci,llm,log,project}.py`)
+  is gone; only the role prompts, `src/utils/fuzz_wrapper.cpp` and the tool
+  scripts remain.

@@ -20,7 +20,7 @@ GUIDANCE_RE = re.compile(r"^harness_(\d{3})_guidance\.md$")
 
 DEFAULT_DICTIONARY_FILE = "dictionary.dict"
 
-# Mirrors src/utils/project.py:192-211 as a plain mapping.
+# Fixed directory layout of a campaign tree.
 FUZZER_STATES = {
     "NOT_EXECUTED",
     "CRASHED",

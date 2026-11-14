@@ -23,7 +23,6 @@ if not (REPO_ROOT / "src").is_dir():
 sys.path.insert(0, str(REPO_ROOT))
 
 # Importing ``src`` would otherwise initialise (and possibly wipe) the campaign.
-os.environ.setdefault("FUZZAGENT_SKIP_ENV_INIT", "1")
 
 from src.runtime.mcp.server import main  # noqa: E402
 

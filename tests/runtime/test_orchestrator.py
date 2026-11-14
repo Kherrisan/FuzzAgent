@@ -24,6 +24,12 @@ class FakeHC:
         self.killed: list[str] = []
         self.interrupted: list[str] = []
         self.read_text = "fake screen"
+        self.binary = "hc"
+        self.session = None
+        self.env: dict[str, str] = {}
+
+    def list_all(self):
+        return list(self.terminals.values())
 
     def get(self, name: str):
         return self.terminals.get(name)
@@ -95,26 +101,62 @@ def campaign(tmp_path: Path) -> CampaignConfig:
 
 @pytest.fixture()
 def orchestrator(campaign, tmp_path):
-    agent = render_agent(load_agent(REPO / "config" / "agents" / "HarnessAgent.yaml"), campaign)
+    agent = render_agent(load_agent(REPO / "config" / "agents-codex" / "HarnessAgent.yaml"), campaign)
     agent.home = str(tmp_path / "home")
     agent.cwd = str(tmp_path / "work")
-    agent.source_path = str(REPO / "config" / "agents" / "HarnessAgent.yaml")
+    agent.source_path = str(REPO / "config" / "agents-codex" / "HarnessAgent.yaml")
     fake = FakeHC()
     return OrchestratorStub(campaign, {"HarnessAgent": agent}, hc=fake, observer=lambda: '{"ok": true}'), fake
 
 
+def test_observe_agent_states_reports_hc_status_and_screen_command(campaign, tmp_path):
+    agents = {}
+    for role in ("BuilderAgent", "SeedAgent"):
+        agent = render_agent(load_agent(REPO / "config" / "agents-codex" / f"{role}.yaml"), campaign)
+        agent.home = str(tmp_path / role / "home")
+        agent.cwd = str(tmp_path / role / "work")
+        agent.source_path = str(REPO / "config" / "agents-codex" / f"{role}.yaml")
+        agents[role] = agent
+    fake = FakeHC()
+    fake.session = "fz-cjson"
+    fake.env = {"HC_SESSION": "fz-cjson", "XDG_STATE_HOME": "/root/.local/state"}
+    fake.terminals["builderagent"] = Terminal(
+        address="t2",
+        name="builderagent",
+        state="live",
+        status={"state": "working"},
+        reported=True,
+        turn=4,
+        raw={"labels": {"fuzzagent.role": "BuilderAgent"}},
+    )
+    orch = OrchestratorStub(campaign, agents, hc=fake, observer=lambda: "{}")
+    report = json.loads(orch.observe_agent_states())
+    by_role = {row["role"]: row for row in report["agents"]}
+    assert report["session"] == "fz-cjson"
+    assert by_role["BuilderAgent"]["launched"] is True
+    assert by_role["BuilderAgent"]["status"] == "working"
+    assert by_role["BuilderAgent"]["turn"] == 4
+    assert by_role["BuilderAgent"]["screen_command"] == (
+        "XDG_STATE_HOME=/root/.local/state HC_SESSION=fz-cjson hc read builderagent --lines 200"
+    )
+    assert by_role["SeedAgent"]["launched"] is False
+    assert by_role["SeedAgent"]["status"] == "absent"
+    assert by_role["SeedAgent"]["screen_command"].endswith("hc read seedagent --lines 200")
+
+
 def test_manager_dispatch_asks_for_finish_task(campaign, tmp_path):
-    agent = render_agent(load_agent(REPO / "config" / "agents" / "ManagerAgent.yaml"), campaign)
+    agent = render_agent(load_agent(REPO / "config" / "agents-codex" / "ManagerAgent.yaml"), campaign)
     agent.home = str(tmp_path / "home")
     agent.cwd = str(tmp_path / "work")
-    agent.source_path = str(REPO / "config" / "agents" / "ManagerAgent.yaml")
+    agent.source_path = str(REPO / "config" / "agents-codex" / "ManagerAgent.yaml")
     fake = FakeHC()
     orch = OrchestratorStub(campaign, {"ManagerAgent": agent}, hc=fake, observer=lambda: "{}")
     orch.dispatch("ManagerAgent", "continue")
     assert "finish_task" in fake.sent[0]
     prime = (Path(campaign.output) / ".campaign" / "agents" / "ManagerAgent" / "prime.md").read_text()
-    assert "call the MCP tool `finish_task`" in prime
-    assert "Do not call `finish_task`" not in prime
+    assert "finish_task" in prime
+    assert "observe_agent_states" in prime
+    assert "wait_agent_task" in prime
 
 
 def test_first_dispatch_primes_the_agent(orchestrator, campaign):
