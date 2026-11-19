@@ -146,3 +146,11 @@ def test_run_dispatches_after_successful_setup(controller: CampaignController, t
     controller.orchestrator.dispatch = lambda role, task: calls.append(role) or "ok"  # type: ignore[assignment]
     assert controller.run(max_rounds=1) is True
     assert calls == ["ManagerAgent"]
+
+
+def test_run_setup_skips_when_script_missing(controller: CampaignController, tmp_path: Path):
+    controller.campaign.setup_script = str(tmp_path / "absent.sh")
+    assert controller.run_setup() is True
+    assert controller.setup_failed is False
+    journal = (Path(controller.campaign.output) / ".campaign" / "journal.jsonl").read_text()
+    assert '"setup_skipped"' in journal

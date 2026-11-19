@@ -186,9 +186,6 @@ class CampaignConfig:
             raise ConfigError(f"src/output must exist: {self.src} / {self.output}")
         if not Path(self.agents_dir).is_dir():
             raise ConfigError(f"agents_dir not found: {self.agents_dir}")
-        if self.setup_script and "${" not in self.setup_script:
-            if not Path(self.setup_script).is_file():
-                raise ConfigError(f"setup_script not found: {self.setup_script}")
 
 
 def _agent_from_dict(data: dict[str, Any], source_path: str | None = None) -> AgentConfig:

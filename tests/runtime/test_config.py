@@ -181,7 +181,8 @@ def test_campaign_setup_script_is_resolved_against_base_dir(tmp_path: Path):
     assert loaded.setup_script == str(tmp_path / "setup.sh")
 
 
-def test_campaign_setup_script_missing_is_a_config_error(tmp_path: Path):
+def test_campaign_setup_script_missing_loads_and_is_skipped_at_runtime(tmp_path: Path):
+    """A target without a provisioner is legal: the script is skipped, not fatal."""
     src = tmp_path / "src" / "cjson"
     out = tmp_path / "out" / "cjson"
     src.mkdir(parents=True)
@@ -193,8 +194,8 @@ def test_campaign_setup_script_missing_is_a_config_error(tmp_path: Path):
         f"base_dir: {tmp_path}\nsetup_script: missing.sh\n",
         encoding="utf-8",
     )
-    with pytest.raises(ConfigError, match="setup_script not found"):
-        load_campaign(path)
+    loaded = load_campaign(path)
+    assert loaded.setup_script == str(tmp_path / "missing.sh")
 
 
 def test_campaign_without_setup_script_loads(tmp_path: Path):

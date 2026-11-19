@@ -669,7 +669,7 @@ def run_fuzzer(fuzzer_id: int):
         envs["AFL_CMPLOG_ONLY_NEW"] = "1"
         cache_fuzzer_dir = ProjectUtils.get_cache_fuzzer_dir(fuzzer_id)
         cmp_fuzzer_binary = os.path.join(cache_fuzzer_dir, CMPLOG_FUZZER)
-        cmd = sandbox_cmd + ["stdbuf", "-oL", "-eL", "afl-fuzz", "-i", fuzzing_corpus_dir, "-o", output_dir, "-x", dictionary_file, "-t", "60000", "-c", cmp_fuzzer_binary, "--", fuzzer, "@@"]
+        cmd = sandbox_cmd + ["stdbuf", "-oL", "-eL", "afl-fuzz", "-i", fuzzing_corpus_dir, "-o", output_dir, "-x", dictionary_file, "-t", "2000", "-c", cmp_fuzzer_binary, "--", fuzzer, "@@"]
     else:
         cmd = sandbox_cmd + ["stdbuf", "-oL", "-eL", fuzzer, "-use_value_profile=1", f"-artifact_prefix={crash_dir}/", "-close_fd_mask=3", "-report_slow_units=60", "-detect_leaks=0", "-ignore_crashes=1", fuzzing_corpus_dir, "-dict=" + dictionary_file]
     cmd_str = " ".join(cmd)
