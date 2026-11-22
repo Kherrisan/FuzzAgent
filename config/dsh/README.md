@@ -33,7 +33,7 @@ role's `$DSH_HOME` and overlays the YAML patch below on top of it.
 | `displayName` | `Ark` | 本机 `~/.dsh/profiles/dsh-tui/cordis.patch.yml` |
 | `baseURL` | `https://ark.cn-beijing.volces.com/api/v3` | 同上 |
 | `api` | `openai-completions` | 同上 |
-| `model` | `deepseek-flash` | 同上 |
+| `model` | `deepseek-v4-1-flash-261017` | 同上 |
 | `apiKeyEnv` | `ARK_FLASH_API_KEY` | 同上 |
 
 密钥**不写进任何仓库文件**。dsh 把它存在凭据库 `~/.dsh/.credentials.yaml`
@@ -59,6 +59,6 @@ dsh --profile tui --dump-config | grep -A6 ark: # 只检查配置
 ```
 dsh --profile tui --dump-config
   → providers.ark: {baseURL: https://ark.cn-beijing.volces.com/api/v3,
-                    api: openai-completions, models: [{id: deepseek-flash}]}
+                    api: openai-completions, models: [{id: deepseek-v4-1-flash-261017}]}
 启动时 "failed to import" 计数 = 0
 ```

@@ -9,7 +9,7 @@
 #
 #   baseURL : https://ark.cn-beijing.volces.com/api/v3
 #   api     : openai-completions
-#   model   : deepseek-flash  (DeepSeek V4.1 Flash, 1M context)
+#   model   : deepseek-v4-1-flash-261017  (DeepSeek V4.1 Flash, 1M context)
 #   api key : read from $ARK_FLASH_API_KEY
 #
 # The key itself is NOT stored here. dsh keeps it in its credential store
@@ -28,8 +28,8 @@
         api: openai-completions
         baseURL: https://ark.cn-beijing.volces.com/api/v3
         models:
-          - id: deepseek-flash
-            name: DeepSeek Flash
+          - id: deepseek-v4-1-flash-261017
+            name: DeepSeek V4.1 Flash
             contextWindow: 1048576
         retryPolicy:
           mode: normal

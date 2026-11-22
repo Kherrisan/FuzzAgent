@@ -3,8 +3,12 @@ enabled: true
 driver: dsh-tui
 launch:
 - dsh
+# provider/model name the route this role may use. The dsh driver injects
+# them as `allowedModels` into the per-role patch overlay, so the run cannot
+# switch to another provider or model. The route itself is declared in
+# config/dsh/profiles/tui/cordis.patch.yml.
 model: ark/deepseek-v4-1-flash-261017
-provider: openai
+provider: ark
 card: src/agents/DictionaryAgent/.well-know/agent.json
 home: ${OUTPUT}/.campaign/agents/DictionaryAgent/home
 cwd: ${OUTPUT}/.campaign/agents/DictionaryAgent/work

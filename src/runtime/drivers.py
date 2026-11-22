@@ -54,6 +54,28 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def model_route(agent) -> tuple[str, str] | None:
+    """The role's ``(provider, model)`` pair, or ``None`` when it names none.
+
+    ``model`` may carry a ``provider/`` prefix (``ark/deepseek-v4-1-flash-...``);
+    a bare name is paired with ``provider``.  A role that sets neither, or only
+    one of them, leaves the model choice to the profile.
+    """
+    model = (agent.model or "").strip()
+    provider = (agent.provider or "").strip()
+    if not model:
+        return None
+    prefix, separator, rest = model.partition("/")
+    if separator:
+        if not provider:
+            provider = prefix
+        if prefix == provider:
+            model = rest
+    if not provider or not model:
+        return None
+    return provider, model
+
+
 def _toml_string(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
@@ -270,14 +292,37 @@ class GrokDriver(Driver):
 
 
 class DshTuiDriver(Driver):
+    # Bundle entry that owns the model picker; it accepts ``allowedModels``.
+    MODEL_ENTRY = "dsh-tui-subagent-model-selection-settings"
+
     def __init__(self) -> None:
         super().__init__("dsh-tui")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
         self._seed_profile(home)
-        patch = home / "dsh-mcp.patch.yml"
-        _write(patch, self._mcp_patch(agent))
+        patch = home / "dsh.patch.yml"
+        _write(patch, self._patch(agent))
         agent.launch = self._launch(agent.launch, patch)
+
+    @classmethod
+    def _patch(cls, agent) -> str:
+        """One overlay: the MCP client insert plus the role's model route.
+
+        The route is injected as ``allowedModels`` so the TUI cannot pick a
+        different provider/model than the profile declares for this role.
+        """
+        text = cls._mcp_patch(agent)
+        route = model_route(agent)
+        if route is None:
+            return text
+        provider, model = route
+        return text + (
+            f"- id: {cls.MODEL_ENTRY}\n"
+            "  config:\n"
+            "    allowedModels:\n"
+            f"      - provider: {json.dumps(provider)}\n"
+            f"        model: {json.dumps(model)}\n"
+        )
 
     @staticmethod
     def _mcp_patch(agent) -> str:
