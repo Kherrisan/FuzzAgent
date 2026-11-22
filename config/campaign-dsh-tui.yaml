@@ -1,5 +1,5 @@
 # Campaign profile: every role runs the dsh-TUI over the `ark` LLM API
-# (config/dsh/profiles/fuzzagent/cordis.patch.yml).
+# (config/dsh/profiles/tui/cordis.patch.yml).
 #
 #   export SRC=/src/wolfssl OUTPUT=$PWD/output/wolfssl HC_SESSION=fz-wolfssl
 #   export HOST_AUTH_DIR=/run/fuzzagent-auth

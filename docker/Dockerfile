@@ -182,18 +182,16 @@ RUN apt-get update && \
 # image; the driver seeds a role by copying the profile it needs (see
 # DSH_PROFILE_TEMPLATE in drivers.py).
 RUN set -eux; \
-    DSH_HOME=/opt/dsh-home dsh plugin --profile dsh-tui add -w \
+    DSH_HOME=/opt/dsh-home dsh plugin --profile tui add -w \
         "@deepseek-harness-tui/dsh-tui@${DSH_TUI_VERSION}"; \
     mv /opt/dsh-home /opt/dsh-profile; \
     rm -rf /opt/dsh-profile/profiles/node_modules \
            /root/.npm /root/.local/share/pnpm; \
-    test -d /opt/dsh-profile/profiles/dsh-tui/node_modules
+    test -d /opt/dsh-profile/profiles/tui/node_modules
 
-# FuzzAgent's own dsh profile: the dsh-TUI plus the `ark` LLM API
-# (config/dsh/profiles/fuzzagent/cordis.patch.yml).  Its bundles resolve from
-# the installed dsh, so it needs no node_modules of its own — the driver copies
-# this small directory into each role's DSH_HOME.
-COPY config/dsh/profiles/ark-deepseek-flash /opt/dsh-profile/profiles/ark-deepseek-flash
+# The repo only carries YAML: the `tui` profile itself (package.json plus its
+# node_modules) is created above, and the driver overlays
+# config/dsh/profiles/tui/cordis.patch.yml (the `ark` LLM API) per role.
 
 # grok CLI (xAI): official installer, pinned.  It unpacks a statically linked
 # binary into $HOME/.grok and symlinks /usr/local/bin/grok itself; the fallback

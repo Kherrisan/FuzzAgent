@@ -20,17 +20,18 @@ from .config import AgentConfig, CampaignConfig
 MCP_COMMAND = "/root/FuzzAgent/bin/fuzzagent-mcp"
 DENY_RULES = ("Bash(campaignctl:*)", "Bash(sudo:*)")
 
-# dsh profile handling.  The image bakes the upstream `dsh-tui` profile with a
-# complete node_modules tree (`dsh plugin add` in docker/Dockerfile); dsh
-# resolves bundle *imports* from the profile directory, so a config-only profile
-# fails with "failed to import".  Our own profile (`ark-deepseek-flash`) ships
-# package.json + cordis.patch.yml from the repo and reuses that tree by symlink.
-DSH_PROFILE = "ark-deepseek-flash"
-DSH_PROFILE_TEMPLATE = Path("/opt/dsh-profile/profiles") / "dsh-tui"
+# dsh profile handling.  The image creates the profile itself
+# (`dsh plugin --profile tui add`, see docker/Dockerfile), which is what writes
+# package.json and the node_modules tree dsh needs to import its bundles.  The
+# repository only carries YAML: `config/dsh/profiles/tui/cordis.patch.yml`, the
+# `ark` LLM provider, which the driver overlays onto each role's copy.
+DSH_PROFILE = "tui"
+DSH_PROFILE_TEMPLATE = Path("/opt/dsh-profile/profiles") / DSH_PROFILE
+DSH_PROFILE_PATCH = "cordis.patch.yml"
 
 
 def _repo_dsh_profile() -> Path:
-    """Repo copy of the profile, used when the image has no baked template."""
+    """Repo copy of the profile's YAML, used to overlay the baked profile."""
     home = Path(os.environ.get("FUZZAGENT_HOME") or "/root/FuzzAgent")
     return home / "config" / "dsh" / "profiles" / DSH_PROFILE
 
@@ -296,7 +297,7 @@ class DshTuiDriver(Driver):
 
     @staticmethod
     def _launch(launch: list[str], patch: Path) -> list[str]:
-        """`dsh --profile ark-deepseek-flash --patch <overlay>`: flags first.
+        """`dsh --profile tui --patch <overlay>`: launcher flags first.
 
         Both ``--profile`` and ``--patch`` are launcher flags, so they must come
         before the first program argument.  The profile carries the ``ark`` LLM
@@ -321,26 +322,17 @@ class DshTuiDriver(Driver):
         """
         target = home / ".dsh" / "profiles" / DSH_PROFILE
         if not (target / "package.json").is_file():
-            sources: dict[str, Path] = {}
-            for name in ("package.json", "cordis.patch.yml"):
-                source = _repo_dsh_profile() / name
-                try:
-                    if source.is_file():
-                        sources[name] = source
-                except OSError:
-                    continue
-            if not sources:
+            # The image's baked profile is the only source of package.json and
+            # node_modules; without it dsh cannot import the bundles.
+            if not (DSH_PROFILE_TEMPLATE / "package.json").is_file():
                 return
-            # dsh resolves bundle *imports* from the profile directory, so the
-            # profile needs the whole installed tree; a symlink or config-only
-            # copy fails with "failed to import".  Copy the baked tree, then
-            # overlay our package.json and cordis.patch.yml (the `ark` provider).
-            if (DSH_PROFILE_TEMPLATE / "package.json").is_file():
-                shutil.copytree(DSH_PROFILE_TEMPLATE, target, symlinks=True, dirs_exist_ok=True)
-            else:
-                target.mkdir(parents=True, exist_ok=True)
-            for name, source in sources.items():
-                shutil.copyfile(source, target / name)
+            shutil.copytree(DSH_PROFILE_TEMPLATE, target, symlinks=True, dirs_exist_ok=True)
+            overlay = _repo_dsh_profile() / DSH_PROFILE_PATCH
+            try:
+                if overlay.is_file():
+                    shutil.copyfile(overlay, target / DSH_PROFILE_PATCH)
+            except OSError:
+                pass
         # The TUI's first-run wizard blocks the terminal until someone answers
         # it; a campaign has no operator.  `~/.dsh-tui/onboarding.json` is the
         # per-machine "already walked through setup" flag (onboardingPrefs.js).
