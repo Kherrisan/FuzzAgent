@@ -160,13 +160,40 @@ RUN go install github.com/boyter/scc/v3@latest
 # Node is needed by the codex/dsh-tui CLIs.  Pin the agent CLIs so a rebuild
 # does not silently change behaviour.  grok comes from its own installer (below);
 # pi is installed from its own package when the campaign needs it.
+ARG CODEX_VERSION=0.163.0
+ARG DSH_VERSION=0.2.0-rc.2
+ARG DSH_TUI_VERSION=0.19.0
+ARG PI_VERSION=1.5.2
 RUN apt-get update && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs python3 python3-yaml && \
-    npm install -g @openai/codex@0.163.0 @deepseek-ai/dsh@0.2.0-rc.2 \
-        @deepseek-harness-tui/dsh-tui@0.19.0 @earendil-works/pi-coding-agent@1.5.2 && \
+    npm install -g "@openai/codex@${CODEX_VERSION}" "@deepseek-ai/dsh@${DSH_VERSION}" \
+        "@deepseek-harness-tui/dsh-tui@${DSH_TUI_VERSION}" \
+        "@earendil-works/pi-coding-agent@${PI_VERSION}" pnpm && \
     npm cache clean --force && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Bake the dsh-tui profile once, at build time.
+#
+# `dsh plugin add` delegates to pnpm (network + a package install), and it has
+# to happen per DSH_HOME — our runtime gives every role its own DSH_HOME for
+# session isolation.  Doing it at campaign start therefore means N installs
+# against the network.  Installing it here instead leaves one template in the
+# image; the driver seeds a role by copying the profile it needs (see
+# DSH_PROFILE_TEMPLATE in drivers.py).
+RUN set -eux; \
+    DSH_HOME=/opt/dsh-home dsh plugin --profile dsh-tui add -w \
+        "@deepseek-harness-tui/dsh-tui@${DSH_TUI_VERSION}"; \
+    mv /opt/dsh-home /opt/dsh-profile; \
+    rm -rf /opt/dsh-profile/profiles/node_modules \
+           /root/.npm /root/.local/share/pnpm; \
+    test -d /opt/dsh-profile/profiles/dsh-tui/node_modules
+
+# FuzzAgent's own dsh profile: the dsh-TUI plus the `ark` LLM API
+# (config/dsh/profiles/fuzzagent/cordis.patch.yml).  Its bundles resolve from
+# the installed dsh, so it needs no node_modules of its own — the driver copies
+# this small directory into each role's DSH_HOME.
+COPY config/dsh/profiles/ark-deepseek-flash /opt/dsh-profile/profiles/ark-deepseek-flash
 
 # grok CLI (xAI): official installer, pinned.  It unpacks a statically linked
 # binary into $HOME/.grok and symlinks /usr/local/bin/grok itself; the fallback

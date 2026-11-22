@@ -1,0 +1,33 @@
+role: FuzzerExecutorAgent
+enabled: true
+driver: dsh-tui
+launch:
+- dsh
+model: ark/deepseek-v4-1-flash-261017
+provider: openai
+card: src/agents/FuzzerExecutorAgent/.well-know/agent.json
+home: ${OUTPUT}/.campaign/agents/FuzzerExecutorAgent/home
+cwd: ${OUTPUT}/.campaign/agents/FuzzerExecutorAgent/work
+prompt:
+  source: src.agents.FuzzerExecutorAgent.prompt:SYSTEM_PROMPT
+  response_format: true
+  delivery: first_send
+tools:
+  include:
+  - run_fuzz_target
+  - finish_task
+mcp:
+  transport: stdio
+  server: fuzzagent-mcp
+  role_arg: FuzzerExecutorAgent
+session:
+  policy: resume
+  id_source:
+  - index_file
+  - probe
+  reset_on:
+  - error
+dispatch:
+  block_seconds: 0
+  poll_seconds: 30
+status: native

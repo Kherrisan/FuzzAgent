@@ -24,8 +24,10 @@ copy() { # src dest-name
 copy "${CODEX_HOME:-$HOME/.codex}/auth.json"      codex/auth.json
 copy "${GROK_HOME:-$HOME/.grok}/auth.json"        grok/auth.json
 copy "${PI_HOME:-$HOME/.pi}/agent/auth.json"      pi/auth.json
-# dsh keeps credentials inside its profile/session store; copy the whole auth
-# file if the distribution provides one, otherwise rely on env keys.
+# dsh keeps provider keys in its credential store ($DSH_HOME/.credentials.yaml,
+# refs: <NAME>), which the `ark` provider reads through apiKeyEnv.  Older
+# layouts used a plain auth.json; copy it too when it exists.
+copy "${DSH_HOME:-$HOME/.dsh}/.credentials.yaml"  dsh/.credentials.yaml
 copy "${DSH_HOME:-$HOME/.dsh}/auth.json"          dsh/auth.json
 
 printf '\nauth bundle: %s\nmount it with FUZZAGENT_AUTH_DIR=%s\n' "$DEST" "$DEST"

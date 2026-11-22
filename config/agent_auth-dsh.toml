@@ -1,0 +1,34 @@
+# ark-deepseek-flash profile: every role reuses the host machine's dsh credential store.
+#
+# Host side:  bin/collect-auth
+#   ~/.dsh/.credentials.yaml  ->  ./.cache/auth/dsh/.credentials.yaml
+# Container:  ./.cache/auth is mounted read-only at /run/fuzzagent-auth
+#             (HOST_AUTH_DIR), and campaignctl copies it into each role HOME
+#             as .dsh/.credentials.yaml with mode 0600.
+#
+# The `ark` provider in config/dsh/profiles/ark-deepseek-flash/cordis.patch.yml reads
+# its key from $ARK_FLASH_API_KEY, which dsh resolves from this store's refs.
+
+[ManagerAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"
+
+[BuilderAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"
+
+[DictionaryAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"
+
+[SeedAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"
+
+[HarnessAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"
+
+[FuzzerExecutorAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"
+
+[CrashAnalyzerAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"
+
+[CoverageAnalyzerAgent.files]
+".dsh/.credentials.yaml" = "${HOST_AUTH_DIR}/dsh/.credentials.yaml"

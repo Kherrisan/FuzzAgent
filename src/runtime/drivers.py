@@ -20,6 +20,20 @@ from .config import AgentConfig, CampaignConfig
 MCP_COMMAND = "/root/FuzzAgent/bin/fuzzagent-mcp"
 DENY_RULES = ("Bash(campaignctl:*)", "Bash(sudo:*)")
 
+# dsh profile handling.  The image bakes the upstream `dsh-tui` profile with a
+# complete node_modules tree (`dsh plugin add` in docker/Dockerfile); dsh
+# resolves bundle *imports* from the profile directory, so a config-only profile
+# fails with "failed to import".  Our own profile (`ark-deepseek-flash`) ships
+# package.json + cordis.patch.yml from the repo and reuses that tree by symlink.
+DSH_PROFILE = "ark-deepseek-flash"
+DSH_PROFILE_TEMPLATE = Path("/opt/dsh-profile/profiles") / "dsh-tui"
+
+
+def _repo_dsh_profile() -> Path:
+    """Repo copy of the profile, used when the image has no baked template."""
+    home = Path(os.environ.get("FUZZAGENT_HOME") or "/root/FuzzAgent")
+    return home / "config" / "dsh" / "profiles" / DSH_PROFILE
+
 
 def _mcp_command() -> str:
     home = os.environ.get("FUZZAGENT_HOME") or "/root/FuzzAgent"
@@ -259,34 +273,82 @@ class DshTuiDriver(Driver):
         super().__init__("dsh-tui")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
-        self._ensure_profile(home)
+        self._seed_profile(home)
         patch = home / "dsh-mcp.patch.yml"
-        _write(
-            patch,
-            "- id: fuzzagent-mcp\n"
-            '  name: "@deepseek-ai/dsh-mcp-client"\n'
-            "  config:\n"
-            "    transport: stdio\n"
-            "    serverName: fuzzagent\n"
-            f'    command: "{_mcp_command()}"\n'
-            f"    args: {json.dumps(_mcp_args(agent.role))}\n",
-        )
-        agent.launch = [*agent.launch, "--patch", str(patch)]
+        _write(patch, self._mcp_patch(agent))
+        agent.launch = self._launch(agent.launch, patch)
 
-    def _ensure_profile(self, home: Path) -> None:
-        """Register the dsh-tui profile in this role's isolated DSH_HOME."""
-        if not shutil.which("dsh"):
-            return
-        dsh_home = home / ".dsh"
-        dsh_home.mkdir(parents=True, exist_ok=True)
-        env = dict(os.environ, DSH_HOME=str(dsh_home))
-        subprocess.run(
-            ["dsh", "plugin", "--profile", "dsh-tui", "add", "@deepseek-harness-tui/dsh-tui"],
-            capture_output=True,
-            text=True,
-            timeout=300,
-            env=env,
+    @staticmethod
+    def _mcp_patch(agent) -> str:
+        # dsh patch layers are id-targeted overrides plus top-level `insert`
+        # lists; a bare `- id: <new>` entry is rejected with
+        # "patch: entry ... not found" (verified with --dump-config).
+        return (
+            "- insert:\n"
+            "    - id: fuzzagent-mcp\n"
+            "      name: \"@deepseek-ai/dsh-mcp-client\"\n"
+            "      config:\n"
+            "        serverName: fuzzagent\n"
+            "        transport: stdio\n"
+            f'        command: "{_mcp_command()}"\n'
+            f"        args: {json.dumps(_mcp_args(agent.role))}\n"
         )
+
+    @staticmethod
+    def _launch(launch: list[str], patch: Path) -> list[str]:
+        """`dsh --profile ark-deepseek-flash --patch <overlay>`: flags first.
+
+        Both ``--profile`` and ``--patch`` are launcher flags, so they must come
+        before the first program argument.  The profile carries the ``ark`` LLM
+        API; the overlay only inserts the MCP client.
+        """
+        argv = list(launch)
+        if argv and Path(argv[0]).name == "dsh" and "--profile" not in argv:
+            argv = [argv[0], "--profile", DSH_PROFILE, *argv[1:]]
+        # prepare() runs both from campaign.prepare() and from ensure_terminal(),
+        # so appending unconditionally would add the same overlay twice.
+        if "--patch" not in argv:
+            argv = [*argv, "--patch", str(patch)]
+        return argv
+
+    def _seed_profile(self, home: Path) -> None:
+        """Give this role its own ``dsh-tui`` profile under ``$DSH_HOME``.
+
+        The profile must carry node_modules (dsh resolves bundle imports from
+        the profile directory), so the image bakes it once with
+        ``dsh plugin add``; seeding copies that tree, which needs no pnpm and no
+        network at campaign start.
+        """
+        target = home / ".dsh" / "profiles" / DSH_PROFILE
+        if not (target / "package.json").is_file():
+            sources: dict[str, Path] = {}
+            for name in ("package.json", "cordis.patch.yml"):
+                source = _repo_dsh_profile() / name
+                try:
+                    if source.is_file():
+                        sources[name] = source
+                except OSError:
+                    continue
+            if not sources:
+                return
+            # dsh resolves bundle *imports* from the profile directory, so the
+            # profile needs the whole installed tree; a symlink or config-only
+            # copy fails with "failed to import".  Copy the baked tree, then
+            # overlay our package.json and cordis.patch.yml (the `ark` provider).
+            if (DSH_PROFILE_TEMPLATE / "package.json").is_file():
+                shutil.copytree(DSH_PROFILE_TEMPLATE, target, symlinks=True, dirs_exist_ok=True)
+            else:
+                target.mkdir(parents=True, exist_ok=True)
+            for name, source in sources.items():
+                shutil.copyfile(source, target / name)
+        # The TUI's first-run wizard blocks the terminal until someone answers
+        # it; a campaign has no operator.  `~/.dsh-tui/onboarding.json` is the
+        # per-machine "already walked through setup" flag (onboardingPrefs.js).
+        ui = home / ".dsh-tui"
+        ui.mkdir(parents=True, exist_ok=True)
+        onboarding = ui / "onboarding.json"
+        if not onboarding.is_file():
+            onboarding.write_text('{"completed": true, "version": 1}\n', encoding="utf-8")
 
 
 class PiDriver(Driver):
