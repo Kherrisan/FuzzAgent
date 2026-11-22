@@ -82,23 +82,44 @@ class TaskQueue:
 TASKs = TaskQueue()
 
 
+AVAILABLE_ENTRIES = [
+    ".agents", ".aws", ".cache", ".campaign", ".codex", ".git", ".gitignore",
+    "build", "coverage_guidance", "crash_reports", "dictionary", "fuzzers",
+    "harnesses", "seeds",
+]
+
 def check_directory() -> bool:
-    """Check if the project directory exists and is properly structured."""
+    """Check if the project directory exists and is properly structured.
+
+    Everything the campaign owns lives in a fixed set of directories at the
+    output root.  Anything else is reported at once, with the convention for
+    temporary material: ``$OUTPUT/.cache/<name>``.
+    """
     project_dir = ProjectUtils.get_project_root_dir()
     if not os.path.exists(project_dir):
         task_entry = TaskEntry("Check Output Directory Structures", Status.FAILED, f"The output directory of the project is not found: {project_dir}")
         TASKs.add_sub_task(task_entry)
         return False
-    entities = os.listdir(project_dir)
-    available_entries = [".cache", ".vms", ".git", ".gitignore", "build", "crash_reports", "crashes", "dictionary", "seeds", "fuzzers", "harnesses", "coverage_guidance"]
-    for entity in entities:
-        if entity not in available_entries:
-            task_entry = TaskEntry("Check Output Directory Structures", Status.FAILED, f"Unknown entity detected in the $OUTPUT directory: `{entity}`. Please don't corrupt the directory structure. The available entities are: {available_entries}.")
-            TASKs.add_sub_task(task_entry)
-            return False
-    task_entry = TaskEntry("Check Output Directory Structures", Status.SUCCESS, "The $OUTPUT directory of the project is properly structured")
-    TASKs.add_sub_task(task_entry)
+
+    unexpected = sorted(e for e in os.listdir(project_dir) if e not in AVAILABLE_ENTRIES)
+    if unexpected:
+        TASKs.add_sub_task(TaskEntry(
+            "Check Output Directory Structures",
+            Status.FAILED,
+            f"Unknown entit{'ies' if len(unexpected) > 1 else 'y'} detected in the "
+            f"$OUTPUT directory: {unexpected}. Please don't corrupt the directory "
+            f"structure. Temporary files belong in $OUTPUT/.cache/<name>; only the "
+            f"fixed directories {AVAILABLE_ENTRIES} may sit at the output root.",
+        ))
+        return False
+
+    TASKs.add_sub_task(TaskEntry(
+        "Check Output Directory Structures",
+        Status.SUCCESS,
+        "The $OUTPUT directory of the project is properly structured",
+    ))
     return True
+
 
 def check_building_artifacts(build_dir: str, artifact_type: str) -> bool:
     work_dir = os.path.join(build_dir, artifact_type)
@@ -229,7 +250,7 @@ def check_build_directory() -> bool:
         TASKs.add_sub_task(task_entry)
         return False
     entities = os.listdir(build_dir)
-    available_entries = ["basic", "fuzzer", "sanitizer", "coverage", "build.sh"]
+    available_entries = ["basic", "fuzzer", "sanitizer", "coverage", "build.sh", "logs"]
     for entity in entities:
         if entity not in available_entries:
             task_entry = TaskEntry("Check Building Artifacts", Status.FAILED, f"Unknown entity detected in the build directory: {entity}. The available entities are: {available_entries}")

@@ -1,0 +1,31 @@
+# grok-only profile: every role reuses the host machine's grok auth file.
+#
+# Host side:  bin/collect-auth
+#   ~/.grok/auth.json  ->  ./.cache/auth/grok/auth.json
+# Container:  ./.cache/auth is mounted read-only at /run/fuzzagent-auth
+#             (HOST_AUTH_DIR), and campaignctl copies it into each role HOME
+#             as .grok/auth.json with mode 0600.
+
+[ManagerAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[BuilderAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[DictionaryAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[SeedAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[HarnessAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[FuzzerExecutorAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[CrashAnalyzerAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+
+[CoverageAnalyzerAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"

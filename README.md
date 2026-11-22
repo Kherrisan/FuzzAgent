@@ -56,37 +56,47 @@ Install Docker Engine and the Docker Compose plugin using the [official guide](h
 docker buildx build -t fuzzagent -f docker/Dockerfile .
 ```
 
-### 2. Configure your LLM
+### 2. Configure agent credentials
 
-```bash
-cp .env_template .env
-```
+For the default hc runtime, collect the installed agent CLIs' credentials with `bin/collect-auth`. The launcher uses `.cache/auth` by default; pass `--auth-dir` to use another bundle. Individual roles and models are configured in `config/agents/`.
 
-Edit `.env` with your endpoint, API key, and model:
-
-```dotenv
-OPENAI_BASE_URL=https://api.example.com/v1
-OPENAI_API_KEY=your-api-key
-OPENAI_MODEL=your-model
-```
-
-A GitHub token is optional. Create one at [github.com/settings/tokens](https://github.com/settings/tokens) and set `GITHUB_TOKEN` in `.env` to enable GitHub search.
+Use `--github-token <token>` to enable GitHub search. Credentials passed as arguments may be visible in shell history and process listings.
 
 ### 3. Launch a benchmark
 
 ```bash
-./benchmark/run.sh cjson
+./benchmark/run.sh launch https://github.com/DaveGamble/cJSON.git
 ```
 
-The launcher prepares the source checkout and starts `fuzzagent-cjson` in the background. The default campaign runs for **24 hours**, then exports full code coverage. Source and output paths are configured automatically.
+The launcher clones the repository and starts `fuzzagent-cjson` in the background. You can also pass a local source directory, for example `./benchmark/run.sh launch /path/to/cJSON`. The default campaign runs for **24 hours**; pass `--duration 10m` for a shorter run. Run `./benchmark/run.sh --help` for all options and defaults.
+
+By default, results go to `output/<target>-YYYYMMDD-HHMM`, for example `output/wolfssl-20261112-1632`. A second launch in the same minute uses the next free suffix, such as `output/wolfssl-20261112-1632-2`. To choose a different directory, pass `--output`:
+
+```bash
+./benchmark/run.sh launch /path/to/cJSON --output /path/to/results
+./benchmark/run.sh resume /path/to/results
+```
+
+For hc campaigns started by this launcher, resume from the output directory or open the running campaign's terminal UI:
+
+```bash
+./benchmark/run.sh resume output/cjson
+./benchmark/run.sh tui --output output/cjson
+```
+
+Resume starts a new duration budget and requires the launcher's saved metadata and working source under the output directory. It preserves campaign artifacts and agent sessions. A new launch refuses to use a nonempty output directory.
+
+The TUI command reads the container name from the output directory's `.campaign/launcher.json`. You can also pass a container name directly, for example `./benchmark/run.sh tui fuzzagent-cjson`.
+
+Each hc agent uses its own persistent home at `<output>/.campaign/agents/<role>/home`, including its `.codex`, `.grok`, or other CLI directory. Credentials are initially copied from the configured auth bundle; existing credentials are preserved on restart. To replace credentials, update the relevant file in the role's home or remove it so the next preparation copies it from the bundle.
 
 ## Benchmarks
 
-Choose a library below and use its **Target ID** with `./benchmark/run.sh <target>`. Library names link to their source repositories.
+Choose a library below and pass its repository URL to `./benchmark/run.sh launch`. Library names link to their source repositories.
 
-The launcher caches checkouts in `.cache/targets/<target>` and saves results in `output/<target>`. It currently clones each repository's default branch; the paper's evaluation uses the specific revisions listed in Table I.
+For URLs, the launcher caches checkouts in `.cache/targets/<target>` and clones the default branch. For local paths, it uses the supplied directory. It derives `<target>` from the directory or repository name. The paper's evaluation uses the specific revisions listed in Table I; to select a revision, pass a local checkout or check out that revision in the cached repository before starting.
 
-| Library | Focus | Target ID |
+| Library | Focus | Paper target ID |
 | :--- | :--- | :--- |
 | [c-ares](https://github.com/c-ares/c-ares) | Asynchronous DNS resolution | `c-ares` |
 | [cJSON](https://github.com/DaveGamble/cJSON) | JSON parsing and serialization | `cjson` |
@@ -112,11 +122,9 @@ The launcher caches checkouts in `.cache/targets/<target>` and saves results in 
 ## License
 
 FuzzAgent is dual-licensed under **[AGPL-3.0-only](LICENSE)** or a separate **commercial license** obtained from the copyright holders. You can choose either option:
-1. **Open-source license (AGPL-3.0-only)**. Use, modify, and share FuzzAgent under the AGPL's terms. If you distribute covered binaries, provide the corresponding source as required by the license. If you run a modified version as a network service, offer its corresponding source to users who interact with it remotely. Full terms: [LICENSE](LICENSE).
+1. **Open-source license (AGPL-3.0-only)**. Use, modify, and share HarnessMinimizer under the AGPL's terms. If you distribute covered binaries, provide the corresponding source as required by the license. If you run a modified version as a network service, offer its corresponding source to users who interact with it remotely. Full terms: [LICENSE](LICENSE).
 
 2. **Commercial license**. If you cannot or do not want to meet the AGPL requirements for your intended use, obtain a separately negotiated commercial license before proceeding. Contact fuzzanything@gmail.com. This repository does not grant a commercial license.
-
-Third-party code and separately installed dependencies retain their upstream licenses under both options. See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) for attribution and dependency licensing information.
 
 ## Citation
 

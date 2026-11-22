@@ -1,0 +1,33 @@
+role: BuilderAgent
+enabled: true
+driver: dsh-tui
+launch:
+- dsh
+model: ark/deepseek-v4-1-flash-261017
+provider: openai
+card: src/agents/BuilderAgent/.well-know/agent.json
+home: ${OUTPUT}/.campaign/agents/BuilderAgent/home
+cwd: ${OUTPUT}/.campaign/agents/BuilderAgent/work
+prompt:
+  source: src.agents.BuilderAgent.prompt:SYSTEM_PROMPT
+  response_format: true
+  delivery: first_send
+tools:
+  include:
+  - run_and_check_build_script
+  - finish_task
+mcp:
+  transport: stdio
+  server: fuzzagent-mcp
+  role_arg: BuilderAgent
+session:
+  policy: resume
+  id_source:
+  - index_file
+  - probe
+  reset_on:
+  - error
+dispatch:
+  block_seconds: 0
+  poll_seconds: 30
+status: native

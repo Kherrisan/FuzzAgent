@@ -282,7 +282,11 @@ class ProjectUtils:
         if not os.path.exists(_src_dir):
             os.makedirs(_src_dir)
         dst_dir = os.path.join(_src_dir, project)
-        if os.path.exists(dst_dir):
+        # run_benchmark.sh points $SRC at .campaign/source with a symlink.
+        # shutil.rmtree refuses that link and raises OSError with no errno.
+        if os.path.islink(dst_dir):
+            os.unlink(dst_dir)
+        elif os.path.exists(dst_dir):
             shutil.rmtree(dst_dir)
         shutil.copytree(project_path, dst_dir)
         os.environ["SRC"] = dst_dir

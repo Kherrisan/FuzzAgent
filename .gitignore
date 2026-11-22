@@ -180,3 +180,6 @@ uv.lock
 #docker/starter/
 Test.py
 controller/run*.sh
+# benchmark run outputs (logs, generated manifests)
+benchmarks/smoke-results/
+benchmarks/7d-launch/

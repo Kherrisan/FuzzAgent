@@ -62,7 +62,7 @@ You must follow this logic flow to decide which Phase to execute:
 
 ## Output Format (Strict)
 
-Before your exit, you must call the `generate_coverage_guidance_report` function to record the coverage analysis report. The recommendation must use the format below.
+Before you call `finish_task`, you must call the `generate_coverage_guidance_report` function to record the coverage analysis report. The recommendation must use the format below.
 
 **Example of Valid Output:**
 ```

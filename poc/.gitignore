@@ -1,0 +1,4 @@
+# build artifacts (rebuild with build.sh)
+poc
+poc_nocheck
+*.o

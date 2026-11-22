@@ -1,0 +1,33 @@
+# One-hour wolfSSL Codex run. Same profile as campaign-codex.yaml.
+#   export SRC=/src/wolfssl OUTPUT=$PWD/output/wolfssl HC_SESSION=fz-wolfssl
+#   export HOST_AUTH_DIR=/root/FuzzAgent/.cache/auth-codex REPO_BASE_NAME=wolfssl
+#   campaignctl --config config/campaign-codex-1h.yaml up
+
+name: "${REPO_BASE_NAME}"
+target: "${REPO_BASE_NAME}"
+src: "${SRC}"
+output: "${OUTPUT}"
+session: "${HC_SESSION}"
+
+duration_hours: 1
+coverage_guidance: true
+
+engine: hc
+manager_role: ManagerAgent
+agents_dir: config/agents-codex
+
+auth_config: config/agent_auth-codex.toml
+
+max_rounds: 0
+
+hc:
+  binary: hc
+  session: "${HC_SESSION}"
+  wait_timeout: 300
+  poll_seconds: 30
+  keep: true
+  outlive_parent: true
+
+resume:
+  mode: auto
+  brief_tasks: 10

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Keep sys.path[0] on the analysis tool dir so project_utils imports resolve.
+exec /root/FuzzAgent/src/tools/analysis/bin/observe_current_states "$@"

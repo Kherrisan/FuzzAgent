@@ -1,0 +1,8 @@
+.git
+.venv
+.cache
+output
+**/__pycache__
+**/*.pyc
+.pytest_cache
+docs/assets

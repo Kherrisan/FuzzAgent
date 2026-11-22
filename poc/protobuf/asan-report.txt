@@ -1,0 +1,15 @@
+[poc] replaying 424 bytes
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+F0000 00:00:1795067184.347013     391 gzip_stream.cc:169] Check failed: count <= max_backup (4 vs. 0) count must be within bounds of output buffer
+*** Check failure stack trace: ***
+    @     0x5634583a67a6  absl::log_internal::LogMessage::PrepareToDie()
+    @     0x5634583a4f34  absl::log_internal::LogMessage::SendToLog()
+    @     0x5634583a4db1  absl::log_internal::LogMessage::Flush()
+    @     0x5634582f7919  absl::log_internal::Voidify::operator&&<>()
+    @     0x56345830be78  google::protobuf::io::GzipInputStream::BackUp()
+    @     0x56345830c241  google::protobuf::io::GzipInputStream::Skip()
+    @     0x5634582e6f1b  LLVMFuzzerTestOneInput
+    @     0x5634582e7356  main
+    @     0x7fd6fa30f1ca  (unknown)
+    @     0x7fd6fa30f28b  __libc_start_main
+    @     0x5634581fbe65  _start

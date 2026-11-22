@@ -11,7 +11,7 @@ ENV TZ=Asia/Shanghai
 # Install dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        bash git sudo jq curl wget gzip locales patch \
+        bash git sudo jq curl wget gzip locales \
         build-essential cmake pkg-config lld ninja-build \
         binutils binutils-dev autoconf automake libtool libncurses5-dev libgdbm-dev libnss3-dev liblzma-dev zlib1g-dev libyaml-dev graphviz libgraphviz-dev \
         libicu-dev libcurl4-openssl-dev libssl-dev libsqlite3-dev ruby-dev libreadline-dev libffi-dev libbz2-dev libc++-dev libc++abi-dev libc6-dev libgcc-9-dev tzdata \
@@ -79,6 +79,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     echo 'source $HOME/.cargo/env' >> ~/.bashrc
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install -F dojo casr
+RUN cargo install treereduce-c
 
 # Install Ruby
 # RUN git clone https://github.com/rbenv/rbenv.git ~/.rbenv && \
@@ -99,6 +100,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     /root/.local/bin/uv python install 3.12 
 
 ENV PATH="/root/.local/bin:${PATH}"
+
 ENV PATH="/root/FuzzAgent/.venv/bin:${PATH}"
 ENV CMAKE_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu"
     
@@ -107,19 +109,40 @@ ENV CMAKE_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu"
 ENV DEBIAN_FRONTEND=dialog
 
 
-# For easy debug (tmux and pwndbg)
-RUN cd /root && git clone --single-branch https://github.com/gpakosz/.tmux.git && \
+# For easy debug (tmux and pwndbg).
+# pwndbg's setup.sh installs gdb via sudo, which drops http_proxy.
+# Write the build proxy into apt so that step still reaches the Ubuntu archive.
+RUN --mount=type=secret,id=github_token,required=false \
+    proxy="${http_proxy:-${HTTP_PROXY:-}}"; \
+    sprox="${https_proxy:-${HTTPS_PROXY:-$proxy}}"; \
+    if [ -n "$proxy" ]; then \
+      printf 'Acquire::http::Proxy "%s";\nAcquire::https::Proxy "%s";\n' "$proxy" "$sprox" > /etc/apt/apt.conf.d/99proxy; \
+      printf 'Defaults env_keep += "http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY"\n' > /etc/sudoers.d/99proxy; \
+      chmod 440 /etc/sudoers.d/99proxy; \
+    fi; \
+    if [ -s /run/secrets/github_token ]; then \
+      basic="$(printf 'x-access-token:%s' "$(cat /run/secrets/github_token)" | base64 -w0)"; \
+      export GIT_CONFIG_COUNT=1; \
+      export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"; \
+      export GIT_CONFIG_VALUE_0="Authorization: Basic ${basic}"; \
+      unset basic; \
+    fi; \
+    cd /root && git clone --single-branch https://github.com/gpakosz/.tmux.git && \
     ln -s -f .tmux/.tmux.conf && \
     cp .tmux/.tmux.conf.local . && \
-    git clone https://github.com/pwndbg/pwndbg.git /tmp/pwndbg && \
+    git clone --depth 1 https://github.com/pwndbg/pwndbg.git /tmp/pwndbg && \
     cd /tmp/pwndbg && \
     git submodule update --init --recursive && \
-    ./setup.sh
+    DEBIAN_FRONTEND=noninteractive ./setup.sh && \
+    rm -f /root/.gitconfig
 
 
-# Install later dependencies
-RUN apt-get install -y --no-install-recommends \
-    bubblewrap rsync yasm
+# Install later dependencies. The LLVM step deletes apt lists, so update again.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    bubblewrap rsync yasm && \
+    rm -f /etc/apt/apt.conf.d/99proxy /etc/sudoers.d/99proxy && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Golang dependencies
 RUN wget https://go.dev/dl/go1.25.1.linux-amd64.tar.gz && \
@@ -132,21 +155,96 @@ ENV PATH=$PATH:$GOPATH/bin
 
 RUN go install github.com/boyter/scc/v3@latest
 
-# Install HarnessMinimizer and its patched reduction engine separately from
-# FuzzAgent's project environment, which is synchronized when the agent starts.
-ARG HARNESSMINIMIZER_REF=fc03c2e3a326d6f55ee03a2300685197583b5295
-ARG HARNESSMINIMIZER_BUILD_JOBS=2
-RUN git init /opt/HarnessMinimizer && \
-    git -C /opt/HarnessMinimizer remote add origin https://github.com/FuzzAnything/HarnessMinimizer.git && \
-    git -C /opt/HarnessMinimizer fetch --depth 1 --no-tags origin "$HARNESSMINIMIZER_REF" && \
-    git -C /opt/HarnessMinimizer checkout --detach FETCH_HEAD && \
-    uv sync --project /opt/HarnessMinimizer --frozen && \
-    /opt/HarnessMinimizer/.venv/bin/python /opt/HarnessMinimizer/tools/treereduce/install.py --jobs "$HARNESSMINIMIZER_BUILD_JOBS" && \
-    /opt/HarnessMinimizer/.tools/bin/treereduce-c --harnessminimizer-supervisor-version
-ENV HARNESSMINIMIZER_PYTHON="/opt/HarnessMinimizer/.venv/bin/python" \
-    HARNESSMINIMIZER_TREEREDUCE="/opt/HarnessMinimizer/.tools/bin/treereduce-c"
 
+# --- hc runtime: coding-agent CLIs + herdr-core -----------------------------
+# Node is needed by the codex/dsh-tui CLIs.  Pin the agent CLIs so a rebuild
+# does not silently change behaviour.  grok comes from its own installer (below);
+# pi is installed from its own package when the campaign needs it.
+ARG CODEX_VERSION=0.163.0
+ARG DSH_VERSION=0.2.0-rc.2
+ARG DSH_TUI_VERSION=0.19.0
+ARG PI_VERSION=1.5.2
+RUN apt-get update && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs python3 python3-yaml && \
+    npm install -g "@openai/codex@${CODEX_VERSION}" "@deepseek-ai/dsh@${DSH_VERSION}" \
+        "@deepseek-harness-tui/dsh-tui@${DSH_TUI_VERSION}" \
+        "@earendil-works/pi-coding-agent@${PI_VERSION}" pnpm && \
+    npm cache clean --force && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Bake the dsh-tui profile once, at build time.
+#
+# `dsh plugin add` delegates to pnpm (network + a package install), and it has
+# to happen per DSH_HOME — our runtime gives every role its own DSH_HOME for
+# session isolation.  Doing it at campaign start therefore means N installs
+# against the network.  Installing it here instead leaves one template in the
+# image; the driver seeds a role by copying the profile it needs (see
+# DSH_PROFILE_TEMPLATE in drivers.py).
+RUN set -eux; \
+    DSH_HOME=/opt/dsh-home dsh plugin --profile dsh-tui add -w \
+        "@deepseek-harness-tui/dsh-tui@${DSH_TUI_VERSION}"; \
+    mv /opt/dsh-home /opt/dsh-profile; \
+    rm -rf /opt/dsh-profile/profiles/node_modules \
+           /root/.npm /root/.local/share/pnpm; \
+    test -d /opt/dsh-profile/profiles/dsh-tui/node_modules
+
+# FuzzAgent's own dsh profile: the dsh-TUI plus the `ark` LLM API
+# (config/dsh/profiles/fuzzagent/cordis.patch.yml).  Its bundles resolve from
+# the installed dsh, so it needs no node_modules of its own — the driver copies
+# this small directory into each role's DSH_HOME.
+COPY config/dsh/profiles/ark-deepseek-flash /opt/dsh-profile/profiles/ark-deepseek-flash
+
+# grok CLI (xAI): official installer, pinned.  It unpacks a statically linked
+# binary into $HOME/.grok and symlinks /usr/local/bin/grok itself; the fallback
+# link covers installer versions that only edit shell rc files, and keeps grok
+# reachable from the per-role HOME directories / non-login shells.
+ARG GROK_VERSION=1.0.77
+RUN curl -fsSL https://x.ai/cli/install.sh | bash -s "${GROK_VERSION}" && \
+    (command -v grok >/dev/null || ln -sf /root/.grok/bin/grok /usr/local/bin/grok) && \
+    grok --version
+
+# herdr-core (the `hc` binary): use docker/herdr-core when it is supplied
+# (offline builds), otherwise fetch the pinned release with the official
+# installer.  Either way the image ends up with `hc` on PATH.
+ARG HC_VERSION=0.1.18
+COPY docker/ /tmp/docker/
+RUN set -eux; \
+    if [ -f /tmp/docker/herdr-core ]; then \
+        install -m 0755 /tmp/docker/herdr-core /usr/local/bin/hc; \
+    else \
+        curl -fsSL https://releases.herdr.dev/core/install.sh \
+            | HC_VERSION="${HC_VERSION}" HC_INSTALL_DIR=/usr/local/bin sh; \
+    fi; \
+    rm -rf /tmp/docker; \
+    hc --version
+
+# hc-tui: terminal UI for the hc session already running in this image.
+# The core is installed above, so skip the installer's own hc download.
+# bin/hc-tui.sh expects this binary and hc-tui-attach to already be in the image.
+ARG HC_TUI_VERSION=0.1.2
+RUN curl -fsSL https://followcat.github.io/hc-tui/install.sh \
+        | HC_TUI_VERSION="${HC_TUI_VERSION}" \
+          HC_TUI_INSTALL_DIR=/usr/local/bin \
+          HC_TUI_SKIP_CORE=1 \
+          sh \
+    && hc-tui --version
+
+# The MCP server every agent CLI spawns; the controller entrypoint.
+# No runtime scripts are baked into the image: campaignctl, fuzzagent-mcp and
+# hc-tui-attach all live in the mounted repo (/root/FuzzAgent/bin), so there is
+# exactly one version of each. hc-tui (the TUI binary) stays in the image.
+
+# --- project Python environment (source stays mounted, deps are baked) ------
+# `uv run` at runtime must not need the network: pin the project environment
+# into the image and disable implicit syncs.
+COPY pyproject.toml uv.lock README.md /opt/fuzzagent-build/
+ENV UV_PROJECT_ENVIRONMENT=/opt/fuzzagent-build/.venv
+RUN /root/.local/bin/uv sync --directory /opt/fuzzagent-build --frozen --no-install-project
+ENV UV_NO_SYNC=1
+ENV PATH="/opt/fuzzagent-build/.venv/bin:${PATH}"
 # We Must mapping our source code to this path in the container (DEV Phase)
 WORKDIR /root/FuzzAgent
+
 
 #ENTRYPOINT ["python", "main.py"]

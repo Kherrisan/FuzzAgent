@@ -62,7 +62,7 @@ You are expected to encounter errors. When errors occur, you should analyze the 
 
 ### 1. Missing Dependencies
 - **Symptom**: `fatal error: zlib.h: No such file or directory` or `Command 'nasm' not found`.
-- **Fix Strategy**: Use the `bash` tool to install missing packages (e.g., `apt-get install -y zlib1g-dev nasm`). Do this BEFORE running the build script again.
+- **Fix Strategy**: Use your shell to install missing packages (e.g., `apt-get install -y zlib1g-dev nasm`). Do this BEFORE running the build script again.
 
 ### 2. Missing 3rdparty libraries
 - **Symptom**:  `ld.lld: error: undefined hidden symbol: lib_xxx_xxx`.
@@ -70,7 +70,7 @@ You are expected to encounter errors. When errors occur, you should analyze the 
 
 ### 3. Struck in the build process
 - **Cause**: The build process for some libraries is non-trivial which some details are not provided in the documentation.
-- **Fix Strategy**: Use the tool `search_web` to search the Oss-Fuzz repository for existing build scripts as reference and modify the build script accordingly.
+- **Fix Strategy**: Use your web search tool to search the Oss-Fuzz repository for existing build scripts as reference and modify the build script accordingly.
 
 ## 4. ASAN Link Error
 - **Cause**: AddressSanitizer is not compatible with the `-Wl,-z,defs` flag and will cause undefined symbol errors. For the projects enabled `-Wl,-z,defs` flag as default, they provide custom cmake flags to avoid the undefined symbol error, such as `-DSANITIZE=address` in libaom. You can add the custom cmake flags to the build script as the below example shows.

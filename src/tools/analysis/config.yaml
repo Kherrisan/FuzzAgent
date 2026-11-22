@@ -10,6 +10,14 @@ tools:
       You still need to decide what to do next based on the process you have executed,
       the feedback you received, and the actual situation of your current working
       directory.
+  observe_agent_states:
+    timeout: 60
+    signature: observe_agent_states
+    docstring: Report every agent's herdr-core terminal as JSON. Each entry has
+      the terminal state (idle, working, blocked, error, or absent) and
+      screen_command, a shell command that prints that agent's hc screen.
+      Use this to see what a still-running agent is doing. It does not describe
+      build artifacts; use observe_current_states for those.
   harness_minimizer:
     timeout: 1200
     signature: harness_minimizer <fuzzer_id> <crash_artifact_path>

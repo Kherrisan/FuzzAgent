@@ -1,0 +1,215 @@
+# hc runtime (herdr-core) — design and usage
+
+The multi-agent workflow is unchanged: a Manager observes the campaign state and
+dispatches one specialized role at a time; every role keeps its own prompt,
+tool set and exit guard. What changed is the *runtime*: agents are now
+interactive coding-agent CLIs running inside `hc` terminals, and the glue is an
+MCP server instead of the in-process `BaseAgent` loop.
+
+## Status matrix (verified against this machine)
+
+| CLI | version | OSC 7501 | notes |
+|---|---|---|---|
+| codex | 0.163.0 | yes | must run with `--no-daemon` under hc |
+| grok | 1.0.77 | yes | `program_status = "auto"`; reports `blocked` for trust prompts |
+| dsh-tui | **≥ 0.17.0** | yes | own `ink/termio/osc7501.js`; the 0.15.0 on the dev box predates it |
+| pi | **≥ 1.1.0** | yes | upstream "report program status via OSC 7501" |
+
+grok is installed by the image at build time with the official installer:
+`curl -fsSL https://x.ai/cli/install.sh | bash -s 1.0.77` (verified in a clean
+`ubuntu:24.04`: installs a static binary in `$HOME/.grok` and symlinks
+`/usr/local/bin/grok`; needs the build proxy, which Docker passes to `RUN`).
+
+The old `HERDR_*` channel is **not** used: `env_scrub` removes those variables
+from every agent terminal so dsh-tui reports through OSC 7501 like the others.
+
+## Layout
+
+```
+config/campaign.yaml           campaign settings (paths, budget, hc session)
+config/agents-codex/<Role>.yaml  one independent config per role
+src/runtime/config.py          dataclass model + ${VAR} expansion
+src/runtime/registry.py        src/tools/*/config.yaml -> MCP inputSchema
+src/runtime/executor.py        one subprocess per tool call, full log on disk
+src/runtime/guards.py          legacy pre/exit/post hooks (shared with legacy)
+src/runtime/hc.py              typed wrapper over the hc CLI
+src/runtime/drivers.py         per-CLI launch/MCP/resume adapters
+src/runtime/orchestrator.py    dispatch: task -> hc send/wait -> report
+src/runtime/campaign.py        campaignctl controller (rounds, budget, doctor)
+src/runtime/mcp/server.py      stdio MCP server, one process per agent turn
+bin/fuzzagent-mcp              MCP entrypoint (used by every CLI config)
+bin/campaignctl                operator entrypoint
+$OUTPUT/.campaign/             state, task journal, transcripts, role homes
+```
+
+## Per-agent configuration
+
+Each `config/agents-codex/<Role>.yaml` is independent: driver, launch argv, model,
+env, isolated `HOME` (so CLI sessions/configs never mix), prompt source, tool
+allowlist, session policy, timeouts and status mode. Paths are
+expanded from `SRC`/`OUTPUT` when the campaign starts.
+
+The tool allowlists are the legacy ones, so the prompts keep working; the MCP
+schemas are byte-identical to the legacy OpenAI function schemas (covered by
+`tests/runtime/test_registry_parity.py`).
+
+## What the image provides (and what it does not)
+
+Built into `fuzzagent` by `docker/Dockerfile`:
+
+| Component | How |
+|---|---|
+| C/C++ toolchain, LLVM 21, AFL++, coverage utils, Rust/casr, Go, gdb/pwndbg, tmux | apt / source builds |
+| Python 3.12 (uv-managed) + system `python3`/`python3-yaml` | `uv python install` + apt |
+| Node 22 + `codex` + `dsh-tui@0.19.0` | npm (pinned) |
+| `grok` 1.0.77 | official xAI installer (pinned) |
+| `fuzzagent-mcp`, `campaignctl` | `COPY bin/… /usr/local/bin` |
+| `hc` (herdr-core) 0.1.18 | official installer (`releases.herdr.dev`), or a local `docker/herdr-core` override |
+| `pi` 1.5.2 | npm `@earendil-works/pi-coding-agent` (pinned) |
+| project Python deps | `uv sync --frozen` into `/opt/fuzzagent-build/.venv`, baked (`UV_PROJECT_ENVIRONMENT`, `UV_NO_SYNC=1`) |
+
+Still **outside** the image (by design or not yet done):
+
+| Component | Where it comes from |
+|---|---|
+| project source + `src/runtime` | bind-mounted at `/root/FuzzAgent` |
+| benchmark config + agent configs | `config/` (mounted with the source) |
+| auth files | `bin/collect-auth` → read-only mount → per-role HOME |
+| target checkouts | host `.cache/targets`, mounted at `/src/<target>` |
+
+`benchmark/run_benchmark.sh` starts `campaignctl --config … up [--resume]`;
+there is a single runtime (hc).
+
+## Auth files
+
+Agent CLIs keep credentials in their own files; the image does not bake them in.
+`config/agent_auth.toml` lists them per role and `campaignctl prepare` copies
+them into that role's isolated `HOME` with mode `0600`:
+
+```toml
+[HarnessAgent.files]
+".codex/auth.json" = "${HOST_AUTH_DIR}/codex/auth.json"
+
+[DictionaryAgent.files]
+".grok/auth.json" = "${HOST_AUTH_DIR}/grok/auth.json"
+```
+
+- `bin/collect-auth` copies the local CLI credentials (`~/.codex/auth.json`,
+  `~/.grok/auth.json`, `~/.pi/agent/auth.json`, `~/.dsh/auth.json`) into
+  `./.cache/auth`, which compose mounts read-only at `/run/fuzzagent-auth`.
+- Existing role credentials are preserved on restart, including tokens refreshed
+  by the CLI. To replace one from the auth bundle, remove the corresponding file
+  in the role home before preparing the campaign again.
+- Missing sources are skipped and reported by `campaignctl doctor` when the role
+  has no existing credential file
+  (`<role>: auth source missing: ...`); contents are never printed or
+  journalled.
+- Role homes are added to `$OUTPUT/.gitignore` (`.campaign/agents/*/home/`) so
+
+## Grok-only profile
+
+`config/campaign-grok.yaml` + `config/agents-grok/` run **every** role with the
+grok CLI, pinned to `grok-4.7` and `--reasoning-effort high`, reusing the host
+machine's grok credentials:
+
+```bash
+bin/collect-auth                       # ~/.grok/auth.json -> ./.cache/auth/grok
+export SRC=/src/cjson OUTPUT=$PWD/output/cjson HC_SESSION=fz-cjson
+export HOST_AUTH_DIR=/run/fuzzagent-auth
+campaignctl --config config/campaign-grok.yaml prepare
+campaignctl --config config/campaign-grok.yaml up --resume
+campaignctl --config config/campaign-grok.yaml doctor
+```
+
+- launch line per role: `grok --model grok-4.7 --reasoning-effort high`
+- `config/agent_auth-grok.toml` maps all eight roles to `.grok/auth.json`
+  sourced from `${HOST_AUTH_DIR}/grok/auth.json` (mode 0600, per-role HOME).
+- Verified locally: `prepare` copies the host auth into every role HOME and
+  `doctor` reports zero problems for the profile.
+
+## Running
+
+```bash
+# legacy (unchanged)
+bash benchmark/run_benchmark.sh
+
+# hc runtime
+export SRC=/src/cjson OUTPUT=$PWD/output/cjson HC_SESSION=fz-cjson
+campaignctl --config config/campaign.yaml prepare
+campaignctl --config config/campaign.yaml up --resume
+campaignctl --config config/campaign.yaml status
+campaignctl --config config/campaign.yaml doctor
+campaignctl --config config/campaign.yaml resume-brief
+```
+
+`doctor` checks: launcher binaries, `hc --version`, contiguous harness/fuzzer
+ids, guidance count vs harness count, crash report completeness.
+
+## Resume semantics
+
+1. **warm** — the hc terminal still exists; just send the next task.
+2. **session** — relaunch the CLI with its resume flag (`codex resume <id>`,
+   `grok -r <id>`, `dsh --profile dsh-tui --resume <id>`, `pi -r <id>`); the
+   session store lives in the role's `HOME` under `$OUTPUT/.campaign/agents/`,
+   so it survives a container restart.
+3. **brief** — no session: start fresh and prepend `resume_brief()` (artifact
+   inventory, interrupted tasks, recent journal entries).
+
+`$OUTPUT/.campaign/journal.jsonl` is the append-only record of dispatch/finish/
+interrupt/rollback; `tasks/<id>/{task.md,tools.jsonl,report.md,meta.json}`
+keeps everything a guard or a human needs after a crash.
+
+
+## Task outcomes (done / blocked / failed)
+
+`finish_task` takes an optional `status`:
+
+| status | when | guards | effect |
+|---|---|---|---|
+| `done` (default) | task completed | enforced (`check_exit`, `force` bypass) | round/task closes as done |
+| `blocked` | missing input, a decision, or the task conflicts with the role | skipped | task closes as blocked, the `exit_reason` is the question for the manager |
+| `failed` | the work failed (compiler missing, tool error, …) | skipped | task closes as failed |
+
+`wait_agent_task` (backed by `Orchestrator.poll_task`) no longer only waits for
+`finish_task.json`:
+
+| child terminal | no finish file | result |
+|---|---|---|
+| `working`, turn unchanged | — | `Task … is not finished.` |
+| `working` longer than `dispatch.stuck_seconds` (default 7200) | — | `hc interrupt` + failed |
+| `idle`/`done`, `turn > started_turn` | yes | **blocked** (or failed when the screen shows an error), with the agent's last message |
+| `blocked` | — | blocked + `status.msg` |
+| terminal gone / `finished` / `error` | — | failed |
+
+A task closed this way writes `meta.json` (`status`, `report`, `detected_by:
+poll_task`) and a `finished` journal event; it never fabricates a
+`finish_task.json`.
+
+The controller reacts to `round_blocked` events: it sleeps
+`blocked_backoff_seconds` (default 30) before the next round and stops after
+`max_blocked_rounds` consecutive blocked rounds (default 3, 0 = never).
+
+## Verification
+
+```bash
+PYTHONPATH=. .cache/venv/bin/python -m pytest tests/runtime -q
+python3 tools/baseline_report.py output/openssl output/gnutls-24h-20261108 \
+        --out-dir tests/fixtures/baseline
+```
+
+Frozen legacy baselines: `output/openssl` (15.83% coverage, 27 harnesses, 3
+crash reports) and `output/gnutls-24h-20261108` (23.59%, 29 harnesses, 12 crash
+reports). Compare structure and pacing first; coverage is a relative threshold
+because the baseline did not record its model settings.
+
+## Remaining work
+
+- P2 probe in the image: codex/dsh-tui 0.19/grok installed (pi still to do) + `hc`, run
+  `doctor`, confirm `reported: true` for all four under hc.
+- P3 shadow run: legacy manager vs hc manager on a short openssl campaign.
+- P4 interruption drills (`kill -9` controller, container restart, host reboot).
+- ~~P5 remove `src/a2a`, `BaseAgent`, the shared ACI pty and the summarizer once
+  the shadow runs pass.~~ done: the legacy runtime (`main.py`, `src/a2a`,
+  `src/agents/base_agent`, `src/planning`, `src/memory`, `src/utils/{aci,llm,log,project}.py`)
+  is gone; only the role prompts, `src/utils/fuzz_wrapper.cpp` and the tool
+  scripts remain.

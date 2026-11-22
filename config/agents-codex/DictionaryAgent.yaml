@@ -1,0 +1,41 @@
+role: DictionaryAgent
+enabled: true
+driver: codex
+launch:
+- codex
+- --no-daemon
+- --model
+- gpt-6-luna
+- -c
+- model_reasoning_effort="high"
+- -c
+- check_for_update_on_startup=false
+model: gpt-6-luna
+provider: openai
+card: src/agents/DictionaryAgent/.well-know/agent.json
+home: ${OUTPUT}/.campaign/agents/DictionaryAgent/home
+cwd: ${OUTPUT}/.campaign/agents/DictionaryAgent/work
+prompt:
+  source: src.agents.DictionaryAgent.prompt:SYSTEM_PROMPT
+  response_format: true
+  delivery: first_send
+tools:
+  include:
+  - validate_dictionary_file
+  - track_web_retrieve_progress
+  - finish_task
+mcp:
+  transport: stdio
+  server: fuzzagent-mcp
+  role_arg: DictionaryAgent
+session:
+  policy: resume
+  id_source:
+  - index_file
+  - probe
+  reset_on:
+  - error
+dispatch:
+  block_seconds: 0
+  poll_seconds: 30
+status: native

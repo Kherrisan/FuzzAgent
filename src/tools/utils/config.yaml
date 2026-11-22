@@ -21,15 +21,39 @@ tools:
         type: string
         description: The detailed description of the task to send to the agent.
         required: true
-  exit:
-    signature: exit <exit_reason> <force>
-    docstring: Exit the task. You can only exit the task when you are sure your task is finished. 
+  finish_task:
+    signature: finish_task <exit_reason> [status] [force]
+    docstring: |
+      Finish the task before ending your turn. exit_reason names the condition and the task ids.
+      status=done: every dispatched sub-agent task has finished successfully, none is blocked or failed,
+      and this manager task is finished. Guards apply.
+      status=failed: any dispatched sub-agent task finished as failed, or this task failed and there is
+      no basis to treat the result as correct. Guards are skipped.
+      status=blocked: any dispatched sub-agent task finished as blocked, or this task is blocked and
+      there is no basis to treat the result as correct or to continue, or you need a decision, or
+      several checks show no change. One check is one observe_agent_states call and one
+      observe_current_states call. No change means every agent's status and turn, and the artifact
+      status, match the previous check. Guards are skipped.
+      An agent that dispatched no sub-agents applies these statuses to its own task only.
     arguments:
       - name: exit_reason
         type: string
-        description: The reason to exit the task. You should always report your task status before exiting the task.
+        description: The reason to finish the task. Report the task status before finishing.
         required: true
+      - name: status
+        type: string
+        description: done = every sub-agent finished successfully and this task is finished; failed = a sub-agent failed, or this task failed with no basis to treat the result as correct; blocked = a sub-agent blocked, or this task is blocked with no basis to treat the result as correct or to continue, or a decision is needed, or several observe_agent_states and observe_current_states checks show no change.
+        required: false
+        enum: ["done", "blocked", "failed"]
       - name: force
         type: boolean
-        description: Force to exit the task regardless of user reminders and restrictions. Only use this option when you encountered fatal errors and cannot be fixed in current task loop.
+        description: Finish even if the guards would reject it. Use this only for a fatal error that cannot be fixed in the current task.
         required: false
+  wait_agent_task:
+    signature: wait_agent_task <task_id>
+    docstring: Check whether a task dispatched with send_agent_task has finished. Returns immediately.
+    arguments:
+      - name: task_id
+        type: string
+        description: The task id returned by send_agent_task.
+        required: true

@@ -1,3 +1,6 @@
-from src.utils.project import init_environment
+"""FuzzAgent package.
 
-init_environment()
+Importing this package has no side effects: campaign setup lives in
+``src.runtime.campaign.CampaignController.prepare`` (hc runtime) and the legacy
+entrypoint is gone.
+"""
