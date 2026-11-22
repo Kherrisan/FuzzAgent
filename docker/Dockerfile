@@ -151,7 +151,10 @@ ENV PATH=$PATH:/usr/local/go/bin
 ENV GOPATH=/go
 ENV PATH=$PATH:$GOPATH/bin
 
-RUN go install github.com/boyter/scc/v3@latest
+# proxy.golang.org is unreachable from here; keep the module proxy overridable
+# so the build works on networks that reach the official one only.
+ARG GOPROXY=https://goproxy.cn,https://goproxy.io,direct
+RUN GOPROXY="${GOPROXY}" go install github.com/boyter/scc/v3@latest
 
 
 # --- hc runtime: coding-agent CLIs + herdr-core -----------------------------
@@ -191,13 +194,15 @@ RUN set -eux; \
 # node_modules) is created above, and the driver overlays
 # config/dsh/profiles/tui/cordis.patch.yml (the `ark` LLM API) per role.
 
-# grok CLI (xAI): official installer, pinned.  It unpacks a statically linked
-# binary into $HOME/.grok and symlinks /usr/local/bin/grok itself; the fallback
-# link covers installer versions that only edit shell rc files, and keeps grok
-# reachable from the per-role HOME directories / non-login shells.
+# grok CLI (xAI), pinned.  The official installer lives on x.ai, which some
+# networks cannot reach, so fetch the same artifact the installer falls back to
+# (its public GCS mirror) and put the binary on PATH directly.  Override
+# GROK_BASE_URL to use another mirror.
 ARG GROK_VERSION=1.0.77
-RUN curl -fsSL https://x.ai/cli/install.sh | bash -s "${GROK_VERSION}" && \
-    (command -v grok >/dev/null || ln -sf /root/.grok/bin/grok /usr/local/bin/grok) && \
+ARG GROK_BASE_URL=https://storage.googleapis.com/grok-build-public-artifacts/cli
+RUN curl -fsSL "${GROK_BASE_URL}/grok-${GROK_VERSION}-linux-x86_64" \
+        -o /usr/local/bin/grok && \
+    chmod 0755 /usr/local/bin/grok && \
     grok --version
 
 # herdr-core (the `hc` binary): use docker/herdr-core when it is supplied
