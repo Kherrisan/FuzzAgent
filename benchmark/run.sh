@@ -66,7 +66,7 @@ Options for launch and resume (values follow each option):
 
 Options for launch only:
   --output DIR              Output directory (default: output/<target>-YYYYMMDD-HHMM)
-  --config PATH             Campaign config inside the container (default: config/campaign.yaml)
+  --config PATH             Campaign config inside the container (default: config/campaign-codex.yaml)
   --session NAME            hc session (default: fz-<target>)
 EOF
     printf '\n  %s\n  %s\n  %s\n' "$(color_command "$0 launch ./my-library --duration 10m --output ./results")" "$(color_command "$0 resume ./results")" "$(color_command "$0 tui --output ./results")"
@@ -121,7 +121,7 @@ if [[ ( "$ACTION" != launch && "$ACTION" != resume ) || $# -lt 2 ]]; then
 fi
 SOURCE="$2"
 shift 2
-OUTPUT_ARG=""; DURATION_ARG=24h; ENGINE_ARG=hc; CONFIG_ARG=config/campaign.yaml; SESSION_ARG=""
+OUTPUT_ARG=""; DURATION_ARG=24h; ENGINE_ARG=hc; CONFIG_ARG=config/campaign-codex.yaml; SESSION_ARG=""
 AUTH_DIR_ARG="$ROOT_DIR/.cache/auth"; API_BASE_ARG=https://api.openai.com/v1; API_KEY_ARG=""; MODEL_ARG=""; GITHUB_ARG=""
 TEMPERATURE_ARG=0.6; TOP_P_ARG=0.9; TOP_K_ARG=20; TIMEOUT_ARG=600; EPOCHS_ARG=100; REMINDER_ARG=0.8; MAX_TOKEN_ARG=128000
 OSS_ID_ARG=""; OSS_SECRET_ARG=""; OSS_ENDPOINT_ARG=""; OSS_BUCKET_ARG=""; HTTP_PROXY_ARG=""; HTTPS_PROXY_ARG=""; NO_PROXY_ARG=localhost,127.0.0.1
@@ -357,7 +357,7 @@ if ! "${docker_cmd[@]}" run -d \
     -e "FUZZAGENT_RESUME=${FUZZAGENT_RESUME:-0}" \
     -e "HC_SESSION=${HC_SESSION:-fz-${REPO_BASE_NAME}}" \
     -e "FUZZAGENT_ENGINE=${FUZZAGENT_ENGINE:-hc}" \
-    -e "FUZZAGENT_CONFIG=${FUZZAGENT_CONFIG:-config/campaign.yaml}" \
+    -e "FUZZAGENT_CONFIG=${FUZZAGENT_CONFIG:-config/campaign-codex.yaml}" \
     -e "HOST_AUTH_DIR=${HOST_AUTH_DIR:-/run/fuzzagent-auth}" \
     -e "REPO_BASE_NAME=${REPO_BASE_NAME}" \
     -e "SRC=/root/src/${REPO_BASE_NAME}" \

@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="campaignctl")
-    parser.add_argument("--config", default="config/campaign.yaml")
+    parser.add_argument("--config", default="config/campaign-codex.yaml")
     sub = parser.add_subparsers(dest="command", required=True)
 
     up = sub.add_parser("up", help="prepare and run the campaign")

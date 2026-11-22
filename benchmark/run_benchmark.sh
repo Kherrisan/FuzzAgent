@@ -3,7 +3,7 @@
 set -uo pipefail
 
 BENCHMARK_DURATION="${FUZZING_DURATION:-24h}"
-CONFIG="${FUZZAGENT_CONFIG:-config/campaign.yaml}"
+CONFIG="${FUZZAGENT_CONFIG:-config/campaign-codex.yaml}"
 
 # Keep a pristine copy of the target source inside the campaign output and work
 # on a symlink, so a build that writes into $SRC cannot corrupt the checkout.

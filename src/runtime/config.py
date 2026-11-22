@@ -163,7 +163,7 @@ class CampaignConfig:
     max_rounds: int = 0
     round_prompt_file: str | None = None
     base_dir: str | None = None
-    auth_config: str | None = "config/agent_auth.toml"
+    auth_config: str | None = "config/agent_auth-codex.toml"
     # Controller behaviour when a manager round reports "blocked": wait a bit
     # instead of re-prompting immediately, and stop after N consecutive ones.
     blocked_backoff_seconds: float = 30.0

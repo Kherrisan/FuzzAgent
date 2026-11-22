@@ -1,4 +1,4 @@
-"""Per-role auth files from config/agent_auth.toml."""
+"""Per-role auth files from a config/agent_auth-<driver>.toml bundle."""
 
 from __future__ import annotations
 

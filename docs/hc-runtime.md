@@ -26,7 +26,7 @@ from every agent terminal so dsh-tui reports through OSC 7501 like the others.
 ## Layout
 
 ```
-config/campaign.yaml           campaign settings (paths, budget, hc session)
+config/campaign-<driver>.yaml  campaign settings (paths, budget, hc session)
 config/agents-codex/<Role>.yaml  one independent config per role
 src/runtime/config.py          dataclass model + ${VAR} expansion
 src/runtime/registry.py        src/tools/*/config.yaml -> MCP inputSchema
@@ -83,7 +83,7 @@ there is a single runtime (hc).
 ## Auth files
 
 Agent CLIs keep credentials in their own files; the image does not bake them in.
-`config/agent_auth.toml` lists them per role and `campaignctl prepare` copies
+`config/agent_auth-<driver>.toml` lists them per role and `campaignctl prepare` copies
 them into that role's isolated `HOME` with mode `0600`:
 
 ```toml
@@ -130,16 +130,15 @@ campaignctl --config config/campaign-grok.yaml doctor
 ## Running
 
 ```bash
-# legacy (unchanged)
+# container entrypoint (sets up the campaign tree, then runs campaignctl up)
 bash benchmark/run_benchmark.sh
 
-# hc runtime
 export SRC=/src/cjson OUTPUT=$PWD/output/cjson HC_SESSION=fz-cjson
-campaignctl --config config/campaign.yaml prepare
-campaignctl --config config/campaign.yaml up --resume
-campaignctl --config config/campaign.yaml status
-campaignctl --config config/campaign.yaml doctor
-campaignctl --config config/campaign.yaml resume-brief
+campaignctl --config config/campaign-codex.yaml prepare
+campaignctl --config config/campaign-codex.yaml up --resume
+campaignctl --config config/campaign-codex.yaml status
+campaignctl --config config/campaign-codex.yaml doctor
+campaignctl --config config/campaign-codex.yaml resume-brief
 ```
 
 `doctor` checks: launcher binaries, `hc --version`, contiguous harness/fuzzer
