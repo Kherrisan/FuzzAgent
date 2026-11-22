@@ -175,7 +175,6 @@ output/
 experiment/
 !experiment_results/logs/
 
-uv.lock
 *.log
 #docker/starter/
 Test.py
