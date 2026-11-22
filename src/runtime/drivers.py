@@ -308,8 +308,9 @@ class DshTuiDriver(Driver):
     def _patch(cls, agent) -> str:
         """One overlay: the MCP client insert plus the role's model route.
 
-        The route is injected as ``allowedModels`` so the TUI cannot pick a
-        different provider/model than the profile declares for this role.
+        The route is injected twice. ``agent-default-model`` makes the role
+        start on it (otherwise the bundle's own default provider wins), and
+        ``allowedModels`` keeps the picker from switching away.
         """
         text = cls._mcp_patch(agent)
         route = model_route(agent)
@@ -317,6 +318,10 @@ class DshTuiDriver(Driver):
             return text
         provider, model = route
         return text + (
+            "- id: agent-default-model\n"
+            "  config:\n"
+            f"    provider: {json.dumps(provider)}\n"
+            f"    model: {json.dumps(model)}\n"
             f"- id: {cls.MODEL_ENTRY}\n"
             "  config:\n"
             "    allowedModels:\n"

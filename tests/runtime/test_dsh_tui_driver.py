@@ -158,6 +158,12 @@ def test_patch_pins_the_role_model_route_as_allowed_models(tmp_path, campaign, m
     drivers.driver_for(agent).prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
 
     text = (Path(agent.home) / "dsh.patch.yml").read_text(encoding="utf-8")
+    assert (
+        "- id: agent-default-model\n"
+        "  config:\n"
+        '    provider: "ark"\n'
+        '    model: "deepseek-v4-1-flash-261017"\n'
+    ) in text
     assert "- id: dsh-tui-subagent-model-selection-settings" in text
     assert "    allowedModels:\n" in text
     assert '      - provider: "ark"\n' in text
