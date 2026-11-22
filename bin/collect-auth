@@ -30,4 +30,33 @@ copy "${PI_HOME:-$HOME/.pi}/agent/auth.json"      pi/auth.json
 copy "${DSH_HOME:-$HOME/.dsh}/.credentials.yaml"  dsh/.credentials.yaml
 copy "${DSH_HOME:-$HOME/.dsh}/auth.json"          dsh/auth.json
 
+# pi reads its keys from auth.json, while the host keeps the ark key in the dsh
+# store.  Merge it in so a pi campaign can use the same ark endpoint as dsh;
+# any provider already in pi's own auth.json is kept as it is.
+merge_pi_ark() {
+  local creds="$DEST/dsh/.credentials.yaml" pi_auth="$DEST/pi/auth.json" key
+  [[ -f "$creds" ]] || return 0
+  key="$(sed -n 's/^[[:space:]]*ARK_FLASH_API_KEY:[[:space:]]*//p' "$creds" | head -1 | tr -d "\"'")"
+  [[ -n "$key" ]] || return 0
+  python3 - "$pi_auth" "$key" <<'PY'
+import json, os, pathlib, sys
+
+path, key = pathlib.Path(sys.argv[1]), sys.argv[2]
+data = {}
+if path.is_file():
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        data = {}
+if not isinstance(data, dict):
+    data = {}
+data["ark"] = {"type": "api_key", "key": key}
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+os.chmod(path, 0o600)
+PY
+  printf 'merged ark credential into %s\n' "$pi_auth"
+}
+merge_pi_ark
+
 printf '\nauth bundle: %s\nmount it with FUZZAGENT_AUTH_DIR=%s\n' "$DEST" "$DEST"

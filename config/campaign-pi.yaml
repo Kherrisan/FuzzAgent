@@ -1,0 +1,46 @@
+# Campaign profile: every role runs the pi CLI against the `ark` LLM API
+# (config/dsh/profiles/tui/cordis.patch.yml declares the same model for dsh).
+#
+#   bin/collect-auth                       # copies pi auth + ark key to ./.cache/auth/pi
+#   export SRC=/src/cjson OUTPUT=$PWD/output/cjson HC_SESSION=fz-cjson
+#   campaignctl --config config/campaign-pi.yaml prepare
+#   campaignctl --config config/campaign-pi.yaml up --resume
+
+name: "${REPO_BASE_NAME}"
+target: "${REPO_BASE_NAME}"
+src: "${SRC}"
+output: "${OUTPUT}"
+session: "${HC_SESSION}"
+
+duration_hours: 24
+coverage_guidance: true
+
+engine: hc
+manager_role: ManagerAgent
+agents_dir: config/agents-pi
+
+# Every role gets the host machine's pi credentials (plus the ark key),
+# copied into its own isolated HOME before the terminal starts.
+auth_config: config/agent_auth-pi.toml
+
+max_rounds: 0
+
+hc:
+  binary: hc
+  session: "${HC_SESSION}"
+  wait_timeout: 300
+  poll_seconds: 30
+  keep: true
+  outlive_parent: true
+
+
+resume:
+  mode: auto
+  brief_tasks: 10
+
+# When a manager round ends with status=blocked, wait this long before the
+# next round, and stop the campaign after this many blocked rounds in a row
+# (0 = never stop).
+blocked_backoff_seconds: 30
+max_blocked_rounds: 3
+

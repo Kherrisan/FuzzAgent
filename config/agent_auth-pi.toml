@@ -1,0 +1,33 @@
+# pi-only profile: every role reuses the host machine's pi credentials.
+#
+# Host side: put the CLI credential at ${HOST_AUTH_DIR}/pi/auth.json
+#   (bin/collect-auth copies ~/.pi/agent/auth.json to ./.cache/auth/pi/auth.json
+#   and adds an `ark` entry from the dsh credential store, so the roles can call
+#   the same ark endpoint the dsh profile uses).
+# Container: campaignctl copies it into each role HOME as .pi/agent/auth.json,
+# mode 0600. Missing sources are reported by doctor and skipped.
+# The endpoint itself (models.json) is written by PiDriver at prepare time.
+
+[ManagerAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
+
+[BuilderAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
+
+[DictionaryAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
+
+[SeedAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
+
+[HarnessAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
+
+[FuzzerExecutorAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
+
+[CrashAnalyzerAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"
+
+[CoverageAnalyzerAgent.files]
+".pi/agent/auth.json" = "${HOST_AUTH_DIR}/pi/auth.json"

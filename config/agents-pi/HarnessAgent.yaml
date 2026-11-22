@@ -1,0 +1,38 @@
+role: HarnessAgent
+enabled: true
+driver: pi
+launch:
+- pi
+- --provider
+- ark
+- --model
+- deepseek-v4-1-flash-261017
+model: ark/deepseek-v4-1-flash-261017
+provider: ark
+card: src/agents/HarnessAgent/.well-know/agent.json
+home: ${OUTPUT}/.campaign/agents/HarnessAgent/home
+cwd: ${OUTPUT}/.campaign/agents/HarnessAgent/work
+prompt:
+  source: src.agents.HarnessAgent.prompt:SYSTEM_PROMPT
+  guidance_variant: src.agents.HarnessAgent.prompt:NO_COVERAGE_GUIDANCE_SYSTEM_PROMPT
+  response_format: true
+  delivery: first_send
+tools:
+  include:
+  - compile_and_check_harness
+  - finish_task
+mcp:
+  transport: stdio
+  server: fuzzagent-mcp
+  role_arg: HarnessAgent
+session:
+  policy: resume
+  id_source:
+  - index_file
+  - probe
+  reset_on:
+  - error
+dispatch:
+  block_seconds: 0
+  poll_seconds: 30
+status: native

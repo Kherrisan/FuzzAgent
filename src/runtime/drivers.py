@@ -394,13 +394,20 @@ class DshTuiDriver(Driver):
 
 
 class PiDriver(Driver):
+    # pi needs a models.json entry for endpoints it does not ship a provider
+    # for.  The key itself stays in auth.json (bin/collect-auth), never here.
+    ENDPOINTS = {
+        "ark": ("Ark", "https://ark.cn-beijing.volces.com/api/v3"),
+        "deepseek": ("DeepSeek", "https://api.deepseek.com/v1"),
+    }
+
     def __init__(self) -> None:
         super().__init__("pi")
 
     def prepare(self, agent, campaign, home, cwd) -> None:
-        config = home / ".pi" / "agent" / "mcp.json"
+        agent_dir = home / ".pi" / "agent"
         _write(
-            config,
+            agent_dir / "mcp.json",
             json.dumps(
                 {
                     "mcpServers": {
@@ -409,6 +416,29 @@ class PiDriver(Driver):
                             "args": _mcp_args(agent.role),
                         }
                     }
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        route = model_route(agent)
+        if route is None or route[0] not in self.ENDPOINTS:
+            return
+        provider, model = route
+        title, base_url = self.ENDPOINTS[provider]
+        _write(
+            agent_dir / "models.json",
+            json.dumps(
+                {
+                    "$schema": "https://pi.dev/schemas/models.schema.json",
+                    "providers": {
+                        provider: {
+                            "name": title,
+                            "baseUrl": base_url,
+                            "api": "openai-completions",
+                            "models": [{"id": model}],
+                        }
+                    },
                 },
                 indent=2,
             )
