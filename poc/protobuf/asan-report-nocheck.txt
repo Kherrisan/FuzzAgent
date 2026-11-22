@@ -1,0 +1,2 @@
+[poc] replaying 424 bytes
+[poc] returned normally - no crash

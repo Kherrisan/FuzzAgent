@@ -1,0 +1,62 @@
+[poc] replaying 32 bytes
+/root/src/libvpx/vp9/vp9_cx_iface.c:1620:21: runtime error: index 8 out of bounds for type 'size_t[8]' (aka 'unsigned long[8]')
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /root/src/libvpx/vp9/vp9_cx_iface.c:1620:21 
+=================================================================
+==367==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x7e5e5ece9358 at pc 0x55a6ac35ed27 bp 0x7ffdad0039e0 sp 0x7ffdad0039d8
+READ of size 4 at 0x7e5e5ece9358 thread T0
+    #0 0x55a6ac35ed26 in vpx_codec_get_cx_data (/poc/libvpx/poc+0x466d26) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+    #1 0x55a6ac359f2f in (anonymous namespace)::Drain(vpx_codec_ctx*) /poc/libvpx/poc.cc:60:10
+    #2 0x55a6ac359f2f in LLVMFuzzerTestOneInput /poc/libvpx/poc.cc:186:5
+    #3 0x55a6ac35a625 in main /poc/libvpx/poc.cc:214:3
+    #4 0x7f8e5f87c1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x7f8e5f87c28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x55a6ac26e514 in _start (/poc/libvpx/poc+0x376514) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+
+0x7e5e5ece9358 is located 73 bytes after 36623-byte region [0x7e5e5ece0400,0x7e5e5ece930f)
+allocated by thread T0 here:
+    #0 0x55a6ac313c88 in malloc (/poc/libvpx/poc+0x41bc88) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+    #1 0x55a6ac369313 in vpx_memalign (/poc/libvpx/poc+0x471313) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+    #2 0x55a6ac369420 in vpx_malloc (/poc/libvpx/poc+0x471420) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+    #3 0x55a6ac369451 in vpx_calloc (/poc/libvpx/poc+0x471451) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+    #4 0x55a6ac3695c4 in encoder_init vp9_cx_iface.c.o
+    #5 0x55a6ac35b591 in vpx_codec_enc_init_ver (/poc/libvpx/poc+0x463591) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+    #6 0x55a6ac359918 in (anonymous namespace)::Encoder::Init(vpx_codec_iface const*, vpx_codec_enc_cfg const*) /poc/libvpx/poc.cc:24:9
+    #7 0x55a6ac359918 in LLVMFuzzerTestOneInput /poc/libvpx/poc.cc:120:16
+    #8 0x55a6ac35a625 in main /poc/libvpx/poc.cc:214:3
+    #9 0x7f8e5f87c1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #10 0x7f8e5f87c28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #11 0x55a6ac26e514 in _start (/poc/libvpx/poc+0x376514) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow (/poc/libvpx/poc+0x466d26) (BuildId: c3cf2c4f2889a2d4251570ddf2cb3933254c575a) in vpx_codec_get_cx_data
+Shadow bytes around the buggy address:
+  0x7e5e5ece9080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7e5e5ece9100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7e5e5ece9180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7e5e5ece9200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7e5e5ece9280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x7e5e5ece9300: 00 07 fa fa fa fa fa fa fa fa fa[fa]fa fa fa fa
+  0x7e5e5ece9380: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7e5e5ece9400: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7e5e5ece9480: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7e5e5ece9500: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7e5e5ece9580: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==367==ABORTING

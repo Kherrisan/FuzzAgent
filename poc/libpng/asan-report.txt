@@ -1,0 +1,34 @@
+[poc] replaying 847 bytes
+=================================================================
+==355==ERROR: AddressSanitizer: negative-size-param: (size=-69)
+    #0 0x55d9b70b4793 in __asan_memcpy (/poc/libpng/poc+0x195793) (BuildId: 6bc324b1667b01f90e05f171803dbd7783176f2e)
+    #1 0x55d9b71339e4 in png_push_save_buffer /root/src/libpng/pngpread.c:514:7
+    #2 0x55d9b7132398 in png_process_data_pause /root/src/libpng/pngpread.c:73:10
+    #3 0x55d9b7142817 in png_push_have_row /root/src/libpng/pngpread.c:1097:7
+    #4 0x55d9b71412f1 in png_push_process_row /root/src/libpng/pngpread.c:924:16
+    #5 0x55d9b713ea3f in png_process_IDAT_data /root/src/libpng/pngpread.c:788:13
+    #6 0x55d9b713b387 in png_push_read_IDAT /root/src/libpng/pngpread.c:632:7
+    #7 0x55d9b71322d3 in png_process_some_data /root/src/libpng/pngpread.c:129:10
+    #8 0x55d9b7131e03 in png_process_data /root/src/libpng/pngpread.c:60:7
+    #9 0x55d9b70fc361 in LLVMFuzzerTestOneInput /poc/libpng/poc.cc:142:5
+    #10 0x55d9b70fda65 in main /poc/libpng/poc.cc:173:3
+    #11 0x7f8cb84b41c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #12 0x7f8cb84b428a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #13 0x55d9b7011494 in _start (/poc/libpng/poc+0xf2494) (BuildId: 6bc324b1667b01f90e05f171803dbd7783176f2e)
+
+0x7d0cb78e014f is located 207 bytes inside of 847-byte region [0x7d0cb78e0080,0x7d0cb78e03cf)
+allocated by thread T0 here:
+    #0 0x55d9b70fad11 in operator new(unsigned long) (/poc/libpng/poc+0x1dbd11) (BuildId: 6bc324b1667b01f90e05f171803dbd7783176f2e)
+    #1 0x55d9b70fdc38 in std::__new_allocator<unsigned char>::allocate(unsigned long, void const*) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/new_allocator.h:151:27
+    #2 0x55d9b70fdc38 in std::allocator_traits<std::allocator<unsigned char>>::allocate(std::allocator<unsigned char>&, unsigned long) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/alloc_traits.h:482:20
+    #3 0x55d9b70fdc38 in std::_Vector_base<unsigned char, std::allocator<unsigned char>>::_M_allocate(unsigned long) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_vector.h:381:20
+    #4 0x55d9b70fdc38 in std::_Vector_base<unsigned char, std::allocator<unsigned char>>::_M_create_storage(unsigned long) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_vector.h:398:33
+    #5 0x55d9b70fdc38 in std::_Vector_base<unsigned char, std::allocator<unsigned char>>::_Vector_base(unsigned long, std::allocator<unsigned char> const&) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_vector.h:335:9
+    #6 0x55d9b70fdc38 in std::vector<unsigned char, std::allocator<unsigned char>>::vector(unsigned long, std::allocator<unsigned char> const&) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_vector.h:557:9
+    #7 0x55d9b70fd9c5 in main /poc/libpng/poc.cc:166:24
+    #8 0x7f8cb84b41c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #9 0x7f8cb84b428a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #10 0x55d9b7011494 in _start (/poc/libpng/poc+0xf2494) (BuildId: 6bc324b1667b01f90e05f171803dbd7783176f2e)
+
+SUMMARY: AddressSanitizer: negative-size-param (/poc/libpng/poc+0x195793) (BuildId: 6bc324b1667b01f90e05f171803dbd7783176f2e) in __asan_memcpy
+==355==ABORTING
