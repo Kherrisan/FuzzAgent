@@ -1,4 +1,4 @@
-# ark-deepseek-flash profile: every role reuses the host machine's dsh credential store.
+# tui profile: every role reuses the host machine's dsh credential store.
 #
 # Host side:  bin/collect-auth
 #   ~/.dsh/.credentials.yaml  ->  ./.cache/auth/dsh/.credentials.yaml
@@ -6,7 +6,7 @@
 #             (HOST_AUTH_DIR), and campaignctl copies it into each role HOME
 #             as .dsh/.credentials.yaml with mode 0600.
 #
-# The `ark` provider in config/dsh/profiles/ark-deepseek-flash/cordis.patch.yml reads
+# The `ark` provider in config/dsh/profiles/tui/cordis.patch.yml reads
 # its key from $ARK_FLASH_API_KEY, which dsh resolves from this store's refs.
 
 [ManagerAgent.files]

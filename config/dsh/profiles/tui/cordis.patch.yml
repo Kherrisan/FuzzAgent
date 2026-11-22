@@ -1,4 +1,4 @@
-# dsh profile patch layer for the `ark-deepseek-flash` profile.
+# dsh profile patch layer for the `tui` profile.
 #
 # Applied after every bundle layer (see @deepseek-ai/dsh README, "Profiles":
 # bundle patches -> profile cordis.patch.yml -> $DSH_HOME/cordis.patch.yml ->

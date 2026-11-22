@@ -1,4 +1,4 @@
-"""dsh driver: profile seeding, ``dsh --profile fuzzagent`` launch, MCP patch."""
+"""dsh driver: `tui` profile seeding, launch argv and the MCP overlay."""
 
 from __future__ import annotations
 
@@ -43,42 +43,43 @@ def _agent(tmp_path: Path, role: str = "ManagerAgent", launch: list[str] | None 
 
 
 def _baked_profile(tmp_path: Path) -> Path:
-    """Stand-in for /opt/dsh-profile/profiles/dsh-tui (the node_modules donor)."""
-    tpl = tmp_path / "baked-dsh-tui"
+    """Stand-in for /opt/dsh-profile/profiles/tui (package.json + node_modules)."""
+    tpl = tmp_path / "baked" / "tui"
     (tpl / "node_modules" / "@deepseek-harness-tui" / "dsh-tui").mkdir(parents=True)
-    (tpl / "package.json").write_text('{"name": "dsh-profile-dsh-tui"}', encoding="utf-8")
+    (tpl / "package.json").write_text('{"name": "dsh-profile-tui"}', encoding="utf-8")
+    (tpl / "cordis.patch.yml").write_text("[]\n", encoding="utf-8")
     return tpl
 
 
-def _repo_profile(tmp_path: Path, monkeypatch) -> Path:
-    """Stand-in for config/dsh/profiles/ark-deepseek-flash."""
+def _repo_patch(tmp_path: Path, monkeypatch) -> Path:
+    """Stand-in for config/dsh/profiles/tui/cordis.patch.yml (YAML only)."""
     repo = tmp_path / "repo"
-    prof = repo / "config" / "dsh" / "profiles" / "ark-deepseek-flash"
+    prof = repo / "config" / "dsh" / "profiles" / "tui"
     prof.mkdir(parents=True)
-    (prof / "package.json").write_text('{"name": "dsh-profile-ark-deepseek-flash"}', encoding="utf-8")
-    (prof / "cordis.patch.yml").write_text("- id: llm-pi-ai\n", encoding="utf-8")
+    patch = prof / "cordis.patch.yml"
+    patch.write_text("- id: llm-pi-ai\n", encoding="utf-8")
     monkeypatch.setenv("FUZZAGENT_HOME", str(repo))
-    return prof
+    return patch
 
 
-def test_prepare_seeds_the_fuzzagent_profile(tmp_path, campaign, monkeypatch):
+def test_prepare_copies_the_baked_profile_and_overlays_the_yaml(tmp_path, campaign, monkeypatch):
     monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", _baked_profile(tmp_path))
-    _repo_profile(tmp_path, monkeypatch)
+    repo_patch = _repo_patch(tmp_path, monkeypatch)
     agent = _agent(tmp_path)
 
     drivers.driver_for(agent).prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
 
-    seeded = Path(agent.home) / ".dsh" / "profiles" / "ark-deepseek-flash"
+    seeded = Path(agent.home) / ".dsh" / "profiles" / "tui"
     assert (seeded / "package.json").is_file()
-    assert (seeded / "cordis.patch.yml").is_file()
     assert (seeded / "node_modules").is_dir()
+    assert (seeded / "cordis.patch.yml").read_text(encoding="utf-8") == repo_patch.read_text(encoding="utf-8")
 
 
 def test_prepare_keeps_an_already_seeded_profile(tmp_path, campaign, monkeypatch):
     monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", _baked_profile(tmp_path))
-    _repo_profile(tmp_path, monkeypatch)
+    _repo_patch(tmp_path, monkeypatch)
     agent = _agent(tmp_path)
-    seeded = Path(agent.home) / ".dsh" / "profiles" / "ark-deepseek-flash"
+    seeded = Path(agent.home) / ".dsh" / "profiles" / "tui"
     seeded.mkdir(parents=True)
     (seeded / "package.json").write_text('{"local": true}', encoding="utf-8")
 
@@ -87,24 +88,23 @@ def test_prepare_keeps_an_already_seeded_profile(tmp_path, campaign, monkeypatch
     assert (seeded / "package.json").read_text(encoding="utf-8") == '{"local": true}'
 
 
-def test_launch_uses_the_launcher_profile_and_patch_once(tmp_path, campaign, monkeypatch):
+def test_launch_uses_the_tui_profile_and_patch_once(tmp_path, campaign, monkeypatch):
     monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", _baked_profile(tmp_path))
-    _repo_profile(tmp_path, monkeypatch)
+    _repo_patch(tmp_path, monkeypatch)
     agent = _agent(tmp_path)
     driver = drivers.driver_for(agent)
 
     driver.prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
     driver.prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
 
-    assert agent.launch[:3] == ["dsh", "--profile", "ark-deepseek-flash"]
+    assert agent.launch[:3] == ["dsh", "--profile", "tui"]
     assert agent.launch.count("--patch") == 1
-    patch = Path(agent.launch[agent.launch.index("--patch") + 1])
-    assert patch.is_file()
+    assert Path(agent.launch[agent.launch.index("--patch") + 1]).is_file()
 
 
 def test_launch_without_dsh_is_left_alone(tmp_path, campaign, monkeypatch):
     monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", _baked_profile(tmp_path))
-    _repo_profile(tmp_path, monkeypatch)
+    _repo_patch(tmp_path, monkeypatch)
     agent = _agent(tmp_path, launch=["dsh-tui"])
 
     drivers.driver_for(agent).prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
@@ -113,9 +113,9 @@ def test_launch_without_dsh_is_left_alone(tmp_path, campaign, monkeypatch):
     assert "--profile" not in agent.launch
 
 
-def test_mcp_patch_carries_the_role(tmp_path, campaign, monkeypatch):
+def test_mcp_overlay_carries_the_role(tmp_path, campaign, monkeypatch):
     monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", _baked_profile(tmp_path))
-    _repo_profile(tmp_path, monkeypatch)
+    _repo_patch(tmp_path, monkeypatch)
     agent = _agent(tmp_path, role="HarnessAgent")
 
     drivers.driver_for(agent).prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
@@ -124,11 +124,24 @@ def test_mcp_patch_carries_the_role(tmp_path, campaign, monkeypatch):
     assert "@deepseek-ai/dsh-mcp-client" in text
     assert 'args: ["--role", "HarnessAgent"]' in text
 
-def test_prepare_without_a_baked_profile_leaves_dsh_alone(tmp_path, campaign, monkeypatch):
-    """No template (and no network) means no profile: dsh then fails loudly."""
-    monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", tmp_path / "absent")
+
+def test_onboarding_is_marked_done(tmp_path, campaign, monkeypatch):
+    monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", _baked_profile(tmp_path))
+    _repo_patch(tmp_path, monkeypatch)
     agent = _agent(tmp_path)
 
     drivers.driver_for(agent).prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
 
-    assert not (Path(agent.home) / ".dsh" / "profiles" / "ark-deepseek-flash").exists()
+    flag = Path(agent.home) / ".dsh-tui" / "onboarding.json"
+    assert flag.is_file() and '"completed": true' in flag.read_text(encoding="utf-8")
+
+
+def test_prepare_without_a_baked_profile_leaves_dsh_alone(tmp_path, campaign, monkeypatch):
+    """No image template means no profile: dsh then fails loudly."""
+    monkeypatch.setattr(drivers, "DSH_PROFILE_TEMPLATE", tmp_path / "absent")
+    _repo_patch(tmp_path, monkeypatch)
+    agent = _agent(tmp_path)
+
+    drivers.driver_for(agent).prepare(agent, campaign, Path(agent.home), Path(agent.cwd))
+
+    assert not (Path(agent.home) / ".dsh" / "profiles" / "tui").exists()
