@@ -22,6 +22,31 @@ color_command() {
     printf '%s%s%s' "$RED" "$1" "$RESET"
 }
 
+# A container on the Docker bridge network sees its own loopback, so a proxy
+# bound to the host's 127.0.0.1 is unreachable from inside it. The bridge
+# gateway is the host address that works there.
+CONTAINER_GATEWAY="${FUZZAGENT_CONTAINER_GATEWAY:-172.17.0.1}"
+
+to_container_proxy() {
+    local value="${1:-}"
+    value="${value//127.0.0.1/$CONTAINER_GATEWAY}"
+    value="${value//localhost/$CONTAINER_GATEWAY}"
+    printf '%s' "$value"
+}
+
+# Only LAN and loopback LLM endpoints bypass the proxy. A public endpoint keeps
+# using it, otherwise a proxied host loses its route to the model API.
+is_private_host() {
+    local host="${1:-}"
+    case "$host" in
+        localhost|::1|127.*|10.*|192.168.*) return 0 ;;
+    esac
+    if [[ "$host" =~ ^172\.(1[6-9]|2[0-9]|3[01])\. ]]; then
+        return 0
+    fi
+    return 1
+}
+
 # A new launch without --output gets its own directory. The stamp is local
 # time to the minute. A second launch in that same minute gets -2, -3, ...
 default_output_dir() {
@@ -60,14 +85,20 @@ Options for launch and resume (values follow each option):
   --oss-access-key-secret K OSS access key secret (default: empty)
   --oss-endpoint URL        OSS endpoint (default: empty)
   --oss-bucket NAME         OSS bucket (default: empty)
-  --http-proxy URL          HTTP proxy (default: empty)
-  --https-proxy URL         HTTPS proxy (default: empty)
-  --no-proxy HOSTS          Proxy exclusions (default: localhost,127.0.0.1)
+  --http-proxy URL          HTTP proxy (default: $http_proxy from the shell)
+  --https-proxy URL         HTTPS proxy (default: $https_proxy from the shell)
+  --no-proxy HOSTS          Proxy exclusions (default: $no_proxy from the shell)
 
 Options for launch only:
   --output DIR              Output directory (default: output/<target>-YYYYMMDD-HHMM)
   --config PATH             Campaign config inside the container (default: config/campaign-codex.yaml)
   --session NAME            hc session (default: fz-<target>)
+
+Proxy defaults come from the shell that starts the launcher. Loopback hosts in
+the HTTP and HTTPS proxy URLs are rewritten to the Docker bridge gateway
+(default 172.17.0.1, override with FUZZAGENT_CONTAINER_GATEWAY) before the
+values are handed to the container, because a bridge container cannot reach
+the host's 127.0.0.1. A private LLM endpoint is added to no_proxy automatically.
 EOF
     printf '\n  %s\n  %s\n  %s\n' "$(color_command "$0 launch ./my-library --duration 10m --output ./results")" "$(color_command "$0 resume ./results")" "$(color_command "$0 tui --output ./results")"
 }
@@ -124,7 +155,7 @@ shift 2
 OUTPUT_ARG=""; DURATION_ARG=24h; ENGINE_ARG=hc; CONFIG_ARG=config/campaign-codex.yaml; SESSION_ARG=""
 AUTH_DIR_ARG="$ROOT_DIR/.cache/auth"; API_BASE_ARG=https://api.openai.com/v1; API_KEY_ARG=""; MODEL_ARG=""; GITHUB_ARG=""
 TEMPERATURE_ARG=0.6; TOP_P_ARG=0.9; TOP_K_ARG=20; TIMEOUT_ARG=600; EPOCHS_ARG=100; REMINDER_ARG=0.8; MAX_TOKEN_ARG=128000
-OSS_ID_ARG=""; OSS_SECRET_ARG=""; OSS_ENDPOINT_ARG=""; OSS_BUCKET_ARG=""; HTTP_PROXY_ARG=""; HTTPS_PROXY_ARG=""; NO_PROXY_ARG=localhost,127.0.0.1
+OSS_ID_ARG=""; OSS_SECRET_ARG=""; OSS_ENDPOINT_ARG=""; OSS_BUCKET_ARG=""; HTTP_PROXY_ARG=""; HTTPS_PROXY_ARG=""; NO_PROXY_ARG=""
 while [[ $# -gt 0 ]]; do
     option="$1"
     if [[ $# -lt 2 || -z "$2" ]]; then printf 'Missing value for %s\n' "$option" >&2; exit 2; fi
@@ -152,7 +183,24 @@ done
 if [[ "$ENGINE_ARG" != hc ]]; then
     printf 'Unsupported engine: %s (only hc is available)\n' "$ENGINE_ARG" >&2; exit 2
 fi
-export http_proxy="$HTTP_PROXY_ARG" HTTP_PROXY="$HTTP_PROXY_ARG" https_proxy="$HTTPS_PROXY_ARG" HTTPS_PROXY="$HTTPS_PROXY_ARG" no_proxy="$NO_PROXY_ARG" NO_PROXY="$NO_PROXY_ARG"
+# Proxy settings for the campaign. Explicit flags win; otherwise inherit the
+# shell that started the launcher. Host-side work (Git clones, image checks)
+# keeps the original values, while the container gets loopback addresses
+# rewritten to the bridge gateway.
+PROXY_HTTP="${HTTP_PROXY_ARG:-${http_proxy:-${HTTP_PROXY:-}}}"
+PROXY_HTTPS="${HTTPS_PROXY_ARG:-${https_proxy:-${HTTPS_PROXY:-$PROXY_HTTP}}}"
+PROXY_NO="${NO_PROXY_ARG:-${no_proxy:-${NO_PROXY:-localhost,127.0.0.1}}}"
+llm_host="${API_BASE_ARG#*://}"
+llm_host="${llm_host%%/*}"
+llm_host="${llm_host%%:*}"
+if [[ -n "$llm_host" ]] && is_private_host "$llm_host" && [[ ",$PROXY_NO," != *",$llm_host,"* ]]; then
+    PROXY_NO="${PROXY_NO:+$PROXY_NO,}$llm_host"
+fi
+PROXY_HTTP_CONTAINER="$(to_container_proxy "$PROXY_HTTP")"
+PROXY_HTTPS_CONTAINER="$(to_container_proxy "$PROXY_HTTPS")"
+export http_proxy="$PROXY_HTTP" HTTP_PROXY="$PROXY_HTTP"
+export https_proxy="$PROXY_HTTPS" HTTPS_PROXY="$PROXY_HTTPS"
+export no_proxy="$PROXY_NO" NO_PROXY="$PROXY_NO"
 
 if [[ "$ACTION" == launch ]]; then
     if [[ -d "$SOURCE" ]]; then
@@ -223,8 +271,8 @@ else
     exit 1
 fi
 if ! "${docker_cmd[@]}" image inspect fuzzagent >/dev/null 2>&1; then
-    printf 'The local fuzzagent image was not found. Build it first with:\n  %sdocker buildx build -t fuzzagent -f %s%s %s\n' \
-        "$RED" "$(color_path "$ROOT_DIR/docker/Dockerfile")" "$RED" "$(color_path "$ROOT_DIR")" >&2
+    printf 'The local fuzzagent image was not found. Build it first with:\n  %s\n' \
+        "$(color_command "$ROOT_DIR/docker/build.sh")" >&2
     exit 1
 fi
 
@@ -310,7 +358,6 @@ export OPENAI_BASE_URL="$API_BASE_ARG" OPENAI_API_KEY="$API_KEY_ARG" OPENAI_MODE
 export LLM_TEMPERATURE="$TEMPERATURE_ARG" LLM_TOP_P="$TOP_P_ARG" LLM_TOP_K="$TOP_K_ARG" LLM_REPLY_TIMEOUT="$TIMEOUT_ARG"
 export MAX_AGENT_EPOCHS="$EPOCHS_ARG" REMINDER_TOKEN_RATIO="$REMINDER_ARG" MAX_TOKEN_LEN="$MAX_TOKEN_ARG"
 export OSS_ACCESS_KEY_ID="$OSS_ID_ARG" OSS_ACCESS_KEY_SECRET="$OSS_SECRET_ARG" OSS_ENDPOINT="$OSS_ENDPOINT_ARG" OSS_BUCKET="$OSS_BUCKET_ARG"
-export http_proxy="$HTTP_PROXY_ARG" HTTP_PROXY="$HTTP_PROXY_ARG" https_proxy="$HTTPS_PROXY_ARG" HTTPS_PROXY="$HTTPS_PROXY_ARG" no_proxy="$NO_PROXY_ARG" NO_PROXY="$NO_PROXY_ARG"
 if [[ "$ACTION" == resume ]]; then
     export FUZZAGENT_ENGINE="${saved[2]}" FUZZAGENT_CONFIG="${saved[3]}" HC_SESSION="${saved[4]}"
 else
@@ -328,7 +375,11 @@ printf '  Target:   %s\n' "$TARGET"
 printf '  Duration: %s\n' "$FUZZING_DURATION"
 printf '  Source:   %s\n' "$(color_path "$TARGET_DIR")"
 printf '  Results:  %s\n' "$(color_path "$RAW_OUTPUT_DIR")"
-printf '  Container: %s\n\n' "$CONTAINER_NAME"
+printf '  Container: %s\n' "$CONTAINER_NAME"
+if [[ -n "$PROXY_HTTP_CONTAINER" || -n "$PROXY_HTTPS_CONTAINER" ]]; then
+    printf '  Proxy:    http=%s https=%s\n' "${PROXY_HTTP_CONTAINER:-none}" "${PROXY_HTTPS_CONTAINER:-none}"
+fi
+printf '\n'
 
 mount_repo="$FUZZAGENT_DIR"
 mount_output="$RAW_OUTPUT_DIR"
@@ -380,12 +431,12 @@ if ! "${docker_cmd[@]}" run -d \
     -e "OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET:-}" \
     -e "OSS_ENDPOINT=${OSS_ENDPOINT:-}" \
     -e "OSS_BUCKET=${OSS_BUCKET:-}" \
-    -e "http_proxy=${http_proxy:-}" \
-    -e "https_proxy=${https_proxy:-}" \
-    -e "HTTP_PROXY=${HTTP_PROXY:-}" \
-    -e "HTTPS_PROXY=${HTTPS_PROXY:-}" \
-    -e "no_proxy=${no_proxy:-localhost,127.0.0.1,211.65.197.92}" \
-    -e "NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,211.65.197.92}" \
+    -e "http_proxy=${PROXY_HTTP_CONTAINER}" \
+    -e "https_proxy=${PROXY_HTTPS_CONTAINER}" \
+    -e "HTTP_PROXY=${PROXY_HTTP_CONTAINER}" \
+    -e "HTTPS_PROXY=${PROXY_HTTPS_CONTAINER}" \
+    -e "no_proxy=${PROXY_NO}" \
+    -e "NO_PROXY=${PROXY_NO}" \
     fuzzagent \
     /bin/bash -c "$COMMAND"; then
     printf '\nCould not start the benchmark container. Check the Docker output above.\n' >&2

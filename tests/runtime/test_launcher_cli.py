@@ -23,24 +23,44 @@ def launcher(tmp_path):
 if [[ "$1" == inspect ]]; then echo running; fi
 if [[ "$1" == exec ]]; then python3 -c 'import json,os,sys; json.dump(sys.argv[1:], open(os.environ["TEST_CAPTURE"], "w"))' "$@"; fi
 if [[ "$1" == run ]]; then
-    python3 -c 'import json,os; json.dump({k:os.environ[k] for k in ("FUZZING_DURATION", "FUZZAGENT_ENGINE", "FUZZAGENT_CONFIG", "HC_SESSION", "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL", "FUZZAGENT_AUTH_DIR", "HTTP_PROXY", "FUZZAGENT_RESUME", "RAW_OUTPUT_DIR")}, open(os.environ["TEST_CAPTURE"], "w"))'
+    python3 - "$@" <<'PY'
+import json, os, sys
+
+keys = (
+    "FUZZING_DURATION", "FUZZAGENT_ENGINE", "FUZZAGENT_CONFIG", "HC_SESSION",
+    "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL", "FUZZAGENT_AUTH_DIR",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "FUZZAGENT_RESUME", "RAW_OUTPUT_DIR",
+)
+injected = {}
+args = sys.argv[1:]
+for index, value in enumerate(args):
+    if value == "-e" and index + 1 < len(args):
+        name, _, injected_value = args[index + 1].partition("=")
+        injected[name] = injected_value
+captured = {key: injected.get(key, os.environ.get(key, "")) for key in keys}
+json.dump(captured, open(os.environ["TEST_CAPTURE"], "w"))
+PY
     mkdir -p "$RAW_OUTPUT_DIR/.campaign/source"
 fi
 ''')
     docker.chmod(0o755)
     env = dict(os.environ, PATH=f"{root / 'bin'}:{os.environ['PATH']}",
                TEST_CAPTURE=str(root / "capture.json"), FUZZING_DURATION="99h",
-               OPENAI_API_KEY="inherited", HTTP_PROXY="inherited")
+               OPENAI_API_KEY="inherited", HTTP_PROXY="http://127.0.0.1:9870",
+               HTTPS_PROXY="http://127.0.0.1:9870", NO_PROXY="localhost,127.0.0.1")
+    for name in ("http_proxy", "https_proxy", "no_proxy"):
+        env.pop(name, None)
     (root / ".env").write_text("OPENAI_MODEL=from-dotenv\n")
 
-    def run(*args):
+    def run(*args, extra_env=None):
         return subprocess.run(["bash", str(script), *map(str, args)], cwd=root,
-                              env=env, text=True, capture_output=True)
+                              env=dict(env, **(extra_env or {})), text=True,
+                              capture_output=True)
 
     return root, run
 
 
-def test_cli_defaults_and_resume_ignore_host_environment(launcher):
+def test_cli_defaults_inherit_and_rewrite_shell_proxy(launcher):
     root, run = launcher
     result = run("launch", root / "source")
     assert result.returncode == 0, result.stderr
@@ -50,7 +70,9 @@ def test_cli_defaults_and_resume_ignore_host_environment(launcher):
     assert re.fullmatch(r"source-\d{8}-\d{4}", output.name)
     assert captured["FUZZING_DURATION"] == "24h"
     assert captured["OPENAI_API_KEY"] == captured["OPENAI_MODEL"] == ""
-    assert captured["HTTP_PROXY"] == ""
+    assert captured["HTTP_PROXY"] == "http://172.17.0.1:9870"
+    assert captured["HTTPS_PROXY"] == "http://172.17.0.1:9870"
+    assert captured["NO_PROXY"] == "localhost,127.0.0.1"
     assert captured["FUZZAGENT_ENGINE"] == "hc"
     assert captured["FUZZAGENT_AUTH_DIR"] == str(root / ".cache/auth")
     result = run("resume", output, "--duration", "5m")
@@ -58,6 +80,17 @@ def test_cli_defaults_and_resume_ignore_host_environment(launcher):
     captured = json.loads((root / "capture.json").read_text())
     assert captured["FUZZING_DURATION"] == "5m"
     assert captured["FUZZAGENT_RESUME"] == "1"
+
+
+def test_cli_rewrites_loopback_proxy_to_configured_gateway(launcher):
+    root, run = launcher
+    result = run("launch", root / "source", "--http-proxy", "http://127.0.0.1:7890",
+                 "--https-proxy", "http://127.0.0.1:7890",
+                 extra_env={"FUZZAGENT_CONTAINER_GATEWAY": "172.18.0.1"})
+    assert result.returncode == 0, result.stderr
+    captured = json.loads((root / "capture.json").read_text())
+    assert captured["HTTP_PROXY"] == "http://172.18.0.1:7890"
+    assert captured["HTTPS_PROXY"] == "http://172.18.0.1:7890"
 
 
 def test_cli_options_and_validation(launcher):

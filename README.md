@@ -53,8 +53,10 @@ Tested on **Ubuntu 24.04 LTS**, using Docker and an OpenAI-compatible LLM endpoi
 Install Docker Engine and the Docker Compose plugin using the [official guide](https://docs.docker.com/engine/install/ubuntu/), then build the image:
 
 ```bash
-docker buildx build -t fuzzagent -f docker/Dockerfile .
+./docker/build.sh
 ```
+
+The script forwards `http_proxy`, `https_proxy`, and `no_proxy` from the current shell as build args. Loopback addresses are rewritten to the Docker bridge gateway (default `172.17.0.1`, override with `--gateway` or `FUZZAGENT_CONTAINER_GATEWAY`) because a build container cannot reach the host's `127.0.0.1`. Use `--tag` to change the image name and `--github-token` to pass a token as a BuildKit secret, which keeps it out of the image history.
 
 ### 2. Configure agent credentials
 
@@ -69,6 +71,8 @@ Use `--github-token <token>` to enable GitHub search. Credentials passed as argu
 ```
 
 The launcher clones the repository and starts `fuzzagent-cjson` in the background. You can also pass a local source directory, for example `./benchmark/run.sh launch /path/to/cJSON`. The default campaign runs for **24 hours**; pass `--duration 10m` for a shorter run. Run `./benchmark/run.sh --help` for all options and defaults.
+
+Like the image build, the launcher inherits `http_proxy`, `https_proxy`, and `no_proxy` from the shell. Host-side steps such as cloning the target keep the original values, while the container receives them with loopback addresses rewritten to the bridge gateway. Pass `--http-proxy`, `--https-proxy`, and `--no-proxy` to override the inherited values; a private LLM endpoint is added to `no_proxy` automatically.
 
 By default, results go to `output/<target>-YYYYMMDD-HHMM`, for example `output/wolfssl-20261112-1632`. A second launch in the same minute uses the next free suffix, such as `output/wolfssl-20261112-1632-2`. To choose a different directory, pass `--output`:
 

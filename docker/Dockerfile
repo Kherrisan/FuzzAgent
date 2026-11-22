@@ -110,15 +110,13 @@ ENV DEBIAN_FRONTEND=dialog
 
 
 # For easy debug (tmux and pwndbg).
-# pwndbg's setup.sh installs gdb via sudo, which drops http_proxy.
-# Write the build proxy into apt so that step still reaches the Ubuntu archive.
+# pwndbg's setup.sh runs apt-get through sudo, so the proxy moves into the apt
+# configuration file, which sudo does not reset.
 RUN --mount=type=secret,id=github_token,required=false \
     proxy="${http_proxy:-${HTTP_PROXY:-}}"; \
     sprox="${https_proxy:-${HTTPS_PROXY:-$proxy}}"; \
     if [ -n "$proxy" ]; then \
       printf 'Acquire::http::Proxy "%s";\nAcquire::https::Proxy "%s";\n' "$proxy" "$sprox" > /etc/apt/apt.conf.d/99proxy; \
-      printf 'Defaults env_keep += "http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY"\n' > /etc/sudoers.d/99proxy; \
-      chmod 440 /etc/sudoers.d/99proxy; \
     fi; \
     if [ -s /run/secrets/github_token ]; then \
       basic="$(printf 'x-access-token:%s' "$(cat /run/secrets/github_token)" | base64 -w0)"; \
@@ -141,7 +139,7 @@ RUN --mount=type=secret,id=github_token,required=false \
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     bubblewrap rsync yasm && \
-    rm -f /etc/apt/apt.conf.d/99proxy /etc/sudoers.d/99proxy && \
+    rm -f /etc/apt/apt.conf.d/99proxy && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Golang dependencies
